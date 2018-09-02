@@ -2,6 +2,8 @@ var canvas = document.getElementById("game");
 var ctx = canvas.getContext("2d");
 var canvasWidthRatio = 2.0 / 3.0;
 var canvasHeightRatio = 0.5;
+var canvasMaxWidth = parseInt(window.getComputedStyle(canvas).getPropertyValue("max-width"));
+var canvasMaxHeight = canvasMaxWidth / canvasWidthRatio * canvasHeightRatio;
 
 // For setting resolution of canvas so that text will not appear blurry
 var PIXEL_RATIO = (function () {
@@ -21,7 +23,6 @@ var setCanvasMarginTop = function(event) {
   document.getElementById('game').style.marginTop = (window.innerHeight - canvas.clientHeight) / 2 + "px"
 };
 var setCanvasResolution = function(event) {
-  let canvasMaxWidth = parseInt(window.getComputedStyle(canvas).getPropertyValue("max-width"));
   canvas.width = canvasMaxWidth * canvasWidthRatio * PIXEL_RATIO;
   canvas.height = canvasMaxWidth * canvasHeightRatio * PIXEL_RATIO;
   ctx.setTransform(PIXEL_RATIO, 0, 0, PIXEL_RATIO, 0, 0);
