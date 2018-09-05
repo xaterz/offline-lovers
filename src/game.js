@@ -7,7 +7,7 @@ var PERSON_WIDTH = 20;
 var PERSON_HEIGHT = 40;
 
 // Change this to make the game easier/harder!
-var NUM_ROUTERS = 4;
+var NUM_ROUTERS = 3;
 var NUM_PEOPLE = 24;
 
 // The compatibility of two love types are relative to how close their IDs are (in a circular list's sense)
@@ -205,6 +205,7 @@ var router = function(x, y) {
     radius: 10,
     wifiPower: 100,
     maxWifiPower: 100,
+    minWifiPower: -30,
     wifiRange: kontra.sprite({
       color: 'turquoise',
       radius: 200,
@@ -223,7 +224,7 @@ var router = function(x, y) {
       return this.y + this.radius;
     },
     isWifiDown: function() {
-      return this.recoverWifi.timer == null;
+      return this.wifiPower < 0;
     },
     collidesWithCursor: function() {
       let dx = cursor.cx() - this.cx();
@@ -231,25 +232,59 @@ var router = function(x, y) {
       return Math.abs(dx) <= this.radius && Math.abs(dy) <= this.radius;
     },
     isHit: function() {
-      if (this.collidesWithCursor() && this.wifiPower > 0) {
-        this.wifiPower -= cursor.wifiDrain;
-        if (this.wifiPower <= 0) {
-          this.wifiPower = 0;
-          this.recoverWifi.stop();
-          this.restartWifi.start();
-        }
+      if (this.collidesWithCursor()) {
+        this.drainWifi.start();
         return true;
+      } else {
+        this.drainWifi.stop();
+        return false;
       }
-      return false;
     },
     drawStats: function() {
-      ctx.font = "11px Arial";
-      ctx.fillStyle = "turquoise";
-      ctx.fillText(this.wifiPower, parseInt(this.x), parseInt(this.y-this.radius/3));
       if (this.isWifiDown()) {
         ctx.font = "11px Arial";
         ctx.fillStyle = "orange";
-        ctx.fillText(this.restartWifi.wifiDowntimeLeft, parseInt(this.x+this.width*1.2), parseInt(this.y+this.height*0.8));
+      } else {
+        ctx.font = "11px Arial";
+        ctx.fillStyle = "turquoise";
+      }
+      ctx.fillText(Math.ceil(this.wifiPower), parseInt(this.x), parseInt(this.y-this.radius/3));
+    },
+    drainWifi: {
+      timer: null,
+      drainInterval: 250,
+      wifiDownDropToPower: -15,
+      start: function() {
+        if (this.timer == null) {
+          var self = this;
+          this.timer = window.setInterval(function(){ self.run(); }, this.drainInterval);
+        }
+      },
+      run: function() {
+        let oldWifiPower = this.parent.wifiPower;
+        if (this.parent.wifiPower > 0) {
+          this.parent.wifiPower -= cursor.wifiDrain;
+        } else if (this.parent.wifiPower > this.parent.minWifiPower) {
+          this.parent.wifiPower -= cursor.wifiDrain / 5;
+          if (this.parent.wifiPower < this.parent.minWifiPower) {
+            this.parent.wifiPower = this.parent.minWifiPower
+          }
+        }
+        if (oldWifiPower > 0 && this.parent.wifiPower <= 0) {
+          this.parent.wifiPower = this.wifiDownDropToPower;
+          for (var i = 0; i < people.length; i++) {
+            let thisPerson = people[i];
+            if (thisPerson.hasMatch() && !thisPerson.hasWifi()) {
+              thisPerson.breakHypno.stop();
+            }
+          };
+        }
+      },
+      stop: function() {
+        if (this.timer != null) {
+          window.clearInterval(this.timer);
+          this.timer = null;
+        }
       }
     },
     recoverWifi: {
@@ -260,49 +295,29 @@ var router = function(x, y) {
         this.timer = window.setInterval(function(){ self.run(); }, this.recoverInterval);
       },
       run: function() {
+        let oldWifiPower = this.parent.wifiPower;
         if (this.parent.wifiPower < this.parent.maxWifiPower) {
-          this.parent.wifiPower += 1;
+          if (this.parent.wifiPower > 0) {
+            this.parent.wifiPower += 1;
+            if (this.parent.wifiPower > this.parent.maxWifiPower) {
+              this.parent.wifiPower = this.parent.maxWifiPower;
+            }
+          } else {
+            this.parent.wifiPower += 0.2;
+          }
+        }
+        if (oldWifiPower <= 0 && this.parent.wifiPower > 0) {
+          for (var i = 0; i < people.length; i++) {
+            let thisPerson = people[i];
+            if (thisPerson.hasMatch() && thisPerson.hasWifi() && !thisPerson.isFullyHypnotized()) {
+              thisPerson.breakHypno.start();
+            }
+          };
         }
       },
       stop: function() {
         window.clearInterval(this.timer);
         this.timer = null;
-      }
-    },
-    restartWifi: {
-      timer: null,
-      wifiDowntimeLeft: 0,
-      restartDuration: 15,
-      start: function() {
-        var self = this;
-        this.wifiDowntimeLeft = this.restartDuration;
-        this.timer = window.setInterval(function(){ self.run(); }, 1000);
-        for (var i = 0; i < people.length; i++) {
-          let thisPerson = people[i];
-          if (thisPerson.hasMatch() && !thisPerson.hasWifi() && thisPerson.breakHypno.timer != null) {
-            thisPerson.breakHypno.stop();
-          }
-        };
-      },
-      run: function() {
-        this.wifiDowntimeLeft -= 1;
-        if (this.wifiDowntimeLeft == 0) {
-          this.parent.recoverWifi.start();
-          this.stop();
-        }
-      },
-      stop: function() {
-        window.clearInterval(this.timer);
-        this.timer = null;
-        if (cursor.isLinking() && cursor.link.entity2.hasWifi()) {
-          cursor.link.destroy();
-        }
-        for (var i = 0; i < people.length; i++) {
-          let thisPerson = people[i];
-          if (thisPerson.hasMatch() && thisPerson.hasWifi() && !thisPerson.isFullyHypnotized() && thisPerson.breakHypno.timer == null) {
-            thisPerson.breakHypno.start();
-          }
-        };
       }
     },
     render: function() {
@@ -312,8 +327,8 @@ var router = function(x, y) {
       }
     },
     init: function() {
+      this.drainWifi.parent = this;
       this.recoverWifi.parent = this;
-      this.restartWifi.parent = this;
       this.wifiRange.x = this.cx();
       this.wifiRange.y = this.cy();
       this.recoverWifi.start();
@@ -372,7 +387,7 @@ var person = function(x, y, typeId) {
           this.hypnoLevel += Math.min(cursor.hypnoPower, this.maxHypnoLevel - this.hypnoLevel);
           if (this.isFullyHypnotized()) {
             this.hypnoColor = cursor.fullColor;
-            if (this.breakHypno.timer != null) { this.breakHypno.stop(); }
+            this.breakHypno.stop();
             this.link.updateState();
           }
         } else if (!this.hasWifi() && !this.isHypnotized()) {
@@ -398,7 +413,7 @@ var person = function(x, y, typeId) {
         let wifiRange = routers[i].wifiRange;
         let dx = wifiRange.x - this.cx();
         let dy = wifiRange.y - this.cy();
-        let dist = Math.sqrt(dx * dx + dy * dy);
+        let dist = Math.sqrt(dx * dx + dy * dy);        
         if (dist <= wifiRange.radius) {
           return true;
         }
@@ -407,10 +422,12 @@ var person = function(x, y, typeId) {
     },
     breakHypno: {
       timer: null,
-      breakInterval: 50,
+      breakInterval: 25,
       start: function() {
-        var self = this;
-        this.timer = window.setInterval(function(){ self.run(); }, this.breakInterval);
+        if (this.timer == null) {
+          var self = this;
+          this.timer = window.setInterval(function(){ self.run(); }, this.breakInterval);
+        }
       },
       run: function() {
         if (this.parent.hypnoLevel == 0) {
@@ -423,8 +440,10 @@ var person = function(x, y, typeId) {
         }
       },
       stop: function() {
-        window.clearInterval(this.timer);
-        this.timer = null;
+        if (this.timer != null) {
+          window.clearInterval(this.timer);
+          this.timer = null;
+        }
       }
     },
     render: function() {
@@ -464,14 +483,6 @@ var people = []
 kontra.pointer.onDown(function(event, object) {
   //console.log(cursor.x + ' ' + cursor.y);
   if (!gameMaster.isGameOver) {
-    for (var i = 0; i < routers.length; i++) {
-      if (routers[i].isHit()) {
-        if (cursor.isLinking()) {
-          cursor.link.destroy();
-        }
-        return;
-      }
-    }
     for (var i = 0; i < people.length; i++) {
       if (people[i].isHit()) {
         if (people[i].hasMatch() && cursor.isLinking()) {
@@ -550,7 +561,7 @@ var gameMaster = {
       this.timer = null;
     },
     getTimeBonus: function() {
-      return (this.min*60 + this.sec)*2.5;
+      return (this.min*60 + this.sec)*3;
     },
     render: function() {
       ctx.fillStyle = 'black'
@@ -703,6 +714,11 @@ var loop = kontra.gameLoop({
     if (cursor.isInCanvas) {
       cursor.x = kontra.pointer.x * canvasWidthRatio;
       cursor.y = kontra.pointer.y * canvasWidthRatio;
+    }
+    if (!gameMaster.isGameOver) {
+      for (var i = 0; i < routers.length; i++) {
+        routers[i].isHit();
+      }
     }
   },
   render: function() {
