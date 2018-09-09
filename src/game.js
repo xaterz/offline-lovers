@@ -296,30 +296,6 @@ var link = function(entity1, entity2) {
       let dy = cursor.cy() - this.hy();
       return Math.abs(dx) <= this.hSize/2 && Math.abs(dy) <= this.hSize/2;
     },
-    render: function() {
-      ctx.strokeStyle = this.linkColor
-      ctx.beginPath();
-      ctx.moveTo(this.entity1.cx(), this.entity1.cy());
-      ctx.lineTo(this.entity2.cx(), this.entity2.cy());
-      ctx.stroke();
-    },
-    drawStats: function() {
-      if (this.isMatch()) {
-        this.entity1.drawLoveType();
-      }
-      this.entity2.drawLoveType();
-      if (this.isPerfectMatch()) {
-        let x = this.hx() - this.hSize/3;
-        let y = this.hy() + this.hSize/4;
-        let gradient = ctx.createLinearGradient(x,y-this.hSize,x,y);
-        gradient.addColorStop(0, cursor.color);
-        gradient.addColorStop((0.9 - 0.9/this.maxLovePower*this.lovePower).toFixed(2), cursor.color);
-        gradient.addColorStop(1.0, cursor.boldColor);
-        ctx.font = this.hSize+"px Courier";
-        ctx.fillStyle = gradient;
-        ctx.fillText("\u2665", x, y);
-      }
-    },
     boostLove: {
       timer: null,
       boostInterval: 150,
@@ -328,6 +304,7 @@ var link = function(entity1, entity2) {
         if (this.timer == null) {
           var self = this;
           this.timer = window.setInterval(function(){ self.run(); }, this.boostInterval);
+          this.parent.boostAnimation.start();
         }
       },
       run: function() {
@@ -342,6 +319,7 @@ var link = function(entity1, entity2) {
         if (this.timer != null) {
           window.clearInterval(this.timer);
           this.timer = null;
+          this.parent.boostAnimation.stop();
         }
       }
     },
@@ -371,6 +349,48 @@ var link = function(entity1, entity2) {
         }
       }
     },
+    boostAnimation: {
+      timer: null,
+      emitInterval: 40,
+      dx: 0,
+      dxMax: 16,
+      dy: 0,
+      dyMin: 3,
+      dyMax: 24,
+      dyStep: 3,
+      color: cursor.boldColor,
+      start: function() {
+        if (this.timer == null) {
+          var self = this;
+          this.dy = this.dyMin;
+          this.dx = Math.random() * 2*this.dxMax - this.dxMax;
+          this.timer = window.setInterval(function(){ self.run(); }, this.emitInterval);
+        }
+      },
+      run: function() {
+        this.dy += this.dyStep;
+        if (this.dy >= this.dyMax) {
+          this.dy = this.dyMin;
+          this.dx = Math.random() * 2*this.dxMax - this.dxMax; 
+        }
+      },
+      stop: function() {
+        if (this.timer != null) {
+          window.clearInterval(this.timer);
+          this.timer = null;
+          this.dy = 0;
+          this.dx = 0;
+        }
+      },
+      render: function() {
+        let hSize = this.parent.hSize/3;
+        let x = this.x - hSize/3 + this.dx;
+        let y = this.y + hSize/4 - this.dy;
+        ctx.font = hSize+"px Courier";
+        ctx.fillStyle = cursor.boldColor;
+        ctx.fillText("\u2665", x, y);
+      }
+    },
     success: function() {
       var self = this;
       gameMaster.score.addScore();
@@ -385,11 +405,45 @@ var link = function(entity1, entity2) {
         }, 1000)
       }
     },
+    render: function() {
+      ctx.strokeStyle = this.linkColor
+      ctx.beginPath();
+      ctx.moveTo(this.entity1.cx(), this.entity1.cy());
+      ctx.lineTo(this.hx(), this.hy());
+      ctx.stroke();
+      if (this.isPerfectMatch()) {
+        let x = this.hx() - this.hSize/3;
+        let y = this.hy() + this.hSize/4;
+        let gradient = ctx.createLinearGradient(x,y-this.hSize,x,y);
+        let colorStop = (0.9 - 0.9/this.maxLovePower*this.lovePower).toFixed(2);
+        gradient.addColorStop(0, cursor.color);
+        gradient.addColorStop(colorStop, cursor.color);
+        gradient.addColorStop(1.0, cursor.boldColor);
+        ctx.font = this.hSize+"px Courier";
+        ctx.fillStyle = gradient;
+        ctx.fillText("\u2665", x, y);
+      }
+      ctx.beginPath();
+      ctx.moveTo(this.hx(), this.hy());
+      ctx.lineTo(this.entity2.cx(), this.entity2.cy());
+      ctx.stroke();
+
+      if (this.boostAnimation.timer != null) {
+        this.boostAnimation.render();
+      }
+      if (this.isMatch()) {
+        this.entity1.drawLoveType();
+      }
+      this.entity2.drawLoveType();
+    },
     init: function() {
       this.entity1.link = this;
       this.entity2.link = this;
       this.boostLove.parent = this;
       this.drainLove.parent = this;
+      this.boostAnimation.parent = this;
+      this.boostAnimation.x = this.hx();
+      this.boostAnimation.y = this.hy();
       if (this.isPerfectMatch()) {
         this.linkColor = cursor.boldColor;
       }
@@ -410,6 +464,9 @@ var router = function(x, y) {
     x: x,
     y: y,
     color: 'slategrey',
+    wifiUpColor: 'turquoise',
+    wifiLossColor: 'lightgrey',
+    wifiDownColor: 'orange',
     width: ROUTER_WIDTH,
     height: ROUTER_WIDTH,
     radius: 10,
@@ -417,11 +474,35 @@ var router = function(x, y) {
     maxWifiPower: 100,
     minWifiPower: -50,
     wifiRange: kontra.sprite({
-      color: 'turquoise',
-      radius: 200,
+      timer: null,
+      emitInterval: 30,
+      radius: 0,
+      minRadius: 20,
+      maxRadius: 200,
+      radiusStep: 5,
+      start: function() {
+        if (this.timer == null) {
+          var self = this;
+          this.radius = this.minRadius;
+          this.timer = window.setInterval(function(){ self.run(); }, this.emitInterval);
+        }
+      },
+      run: function() {
+        this.radius += this.radiusStep;
+        if (this.radius >= this.maxRadius) {
+          this.radius = this.minRadius;
+        }
+      },
+      stop: function() {
+        if (this.timer != null) {
+          window.clearInterval(this.timer);
+          this.timer = null;
+          this.radius = 0;
+        }
+      },
       render: function() {
         ctx.strokeStyle = this.color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
         ctx.stroke();
@@ -444,12 +525,59 @@ var router = function(x, y) {
     drawStats: function() {
       if (this.isWifiDown()) {
         ctx.font = "11px Arial";
-        ctx.fillStyle = "orange";
+        ctx.fillStyle = this.wifiDownColor;
       } else {
         ctx.font = "11px Arial";
-        ctx.fillStyle = "turquoise";
+        ctx.fillStyle = this.wifiUpColor;
       }
-      ctx.fillText(Math.ceil(this.wifiPower), parseInt(this.x), parseInt(this.y-this.radius/3));
+      let wifiPower = Math.ceil(this.wifiPower)
+      //ctx.fillText(wifiPower, parseInt(this.x), parseInt(this.y-this.radius/3));
+
+      let x = parseInt(this.x+this.radius);
+      let y = parseInt(this.y+this.radius*0.75);
+      ctx.lineWidth = 3;
+
+      if (wifiPower > this.maxWifiPower*0.75) {
+        ctx.strokeStyle = this.wifiUpColor;
+      } else {
+        ctx.strokeStyle = this.wifiLossColor;
+      }
+      ctx.beginPath();
+      ctx.arc(x, parseInt(y+this.radius/3*2), parseInt(this.radius/3*8), 1.28*Math.PI, 1.72*Math.PI);
+      ctx.stroke();
+      if (wifiPower > this.maxWifiPower*0.5) {
+        ctx.strokeStyle = this.wifiUpColor;
+      } else {
+        ctx.strokeStyle = this.wifiLossColor;
+      }
+      ctx.beginPath();
+      ctx.arc(x, parseInt(y+this.radius/2), parseInt(this.radius/3*6), 1.28*Math.PI, 1.72*Math.PI);
+      ctx.stroke();
+      if (wifiPower > this.maxWifiPower*0.25) {
+        ctx.strokeStyle = this.wifiUpColor;
+      } else {
+        ctx.strokeStyle = this.wifiLossColor;
+      }
+      ctx.beginPath();
+      ctx.arc(x, parseInt(y+this.radius/3), parseInt(this.radius/3*4), 1.28*Math.PI, 1.72*Math.PI);
+      ctx.stroke();
+
+      if (wifiPower > 0) {
+        ctx.fillStyle = this.wifiUpColor;
+      } else {
+        let gradient = ctx.createLinearGradient(x, y-this.radius/2, x, y+this.radius/2);
+        let colorStop = (0.95/this.minWifiPower*wifiPower).toFixed(2);
+        gradient.addColorStop(0, this.wifiLossColor);
+        gradient.addColorStop(colorStop, this.wifiLossColor);
+        gradient.addColorStop(colorStop, 'white');
+        gradient.addColorStop(colorStop, this.wifiDownColor);
+        gradient.addColorStop(1.0, this.wifiDownColor);
+        ctx.font = this.hSize+"px Courier";
+        ctx.fillStyle = gradient;
+      }
+      ctx.beginPath();
+      ctx.arc(x, y, this.radius/2, 0, 2*Math.PI);
+      ctx.fill();
     },
     drainWifi: {
       timer: null,
@@ -459,6 +587,7 @@ var router = function(x, y) {
         if (this.timer == null) {
           var self = this;
           this.timer = window.setInterval(function(){ self.run(); }, this.drainInterval);
+          this.parent.drainAnimation.start();
         }
       },
       run: function() {
@@ -476,6 +605,7 @@ var router = function(x, y) {
           }
         }
         if (oldWifiPower > 0 && this.parent.wifiPower <= 0) {
+          this.parent.wifiRange.stop();
           seq_wifidown.play();
           this.parent.wifiPower = this.wifiDownDropToPower;
           for (var i = 0; i < people.length; i++) {
@@ -490,6 +620,7 @@ var router = function(x, y) {
         if (this.timer != null) {
           window.clearInterval(this.timer);
           this.timer = null;
+          this.parent.drainAnimation.stop();
         }
       }
     },
@@ -513,6 +644,7 @@ var router = function(x, y) {
           }
         }
         if (oldWifiPower <= 0 && this.parent.wifiPower > 0) {
+          this.parent.wifiRange.start();
           seq_wifiup.play();
           for (var i = 0; i < people.length; i++) {
             let thisPerson = people[i];
@@ -527,17 +659,60 @@ var router = function(x, y) {
         this.timer = null;
       }
     },
+    drainAnimation: {
+      timer: null,
+      emitInterval: 40,
+      radius: 0,
+      minRadius: 3,
+      maxRadius: 24,
+      radiusStep: 3,
+      color: 'crimson',
+      start: function() {
+        if (this.timer == null) {
+          var self = this;
+          this.radius = this.maxRadius;
+          this.timer = window.setInterval(function(){ self.run(); }, this.emitInterval);
+        }
+      },
+      run: function() {
+        this.radius -= this.radiusStep;
+        if (this.radius <= this.minRadius) {
+          this.radius = this.maxRadius;
+        }
+      },
+      stop: function() {
+        if (this.timer != null) {
+          window.clearInterval(this.timer);
+          this.timer = null;
+          this.radius = 0;
+        }
+      },
+      render: function() {
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+    },
     render: function() {
       this.draw();
-      if (!this.isWifiDown()) {
-        this.wifiRange.render();
+      this.wifiRange.render();
+      if (this.drainAnimation.timer != null) {
+        this.drainAnimation.render();
       }
     },
     init: function() {
       this.drainWifi.parent = this;
       this.recoverWifi.parent = this;
+      this.drainAnimation.parent = this;
       this.wifiRange.x = this.cx();
       this.wifiRange.y = this.cy();
+      this.drainAnimation.x = this.cx();
+      this.drainAnimation.y = this.cy();
+      this.wifiRange.color = this.wifiUpColor;
+      var self = this;
+      window.setTimeout(function(){ self.wifiRange.start(); }, Math.random()*500)
       this.recoverWifi.start();
       return this;
     }
@@ -591,7 +766,7 @@ var person = function(x, y, typeId) {
         let dx = wifiRange.x - this.cx();
         let dy = wifiRange.y - this.cy();
         let dist = Math.sqrt(dx * dx + dy * dy);        
-        if (dist <= wifiRange.radius) {
+        if (dist <= wifiRange.maxRadius) {
           return true;
         }
       }
@@ -891,7 +1066,7 @@ var loop = kontra.gameLoop({
         }
       }
       cursor.numBoostLove = numBoostLove;
-        if (numBoostLove == 0) {
+      if (numBoostLove == 0) {
         // Only can drain wifi when not boosting love
         for (var i = 0; i < routers.length; i++) {
           if (routers[i].collidesWithCursor()) {
@@ -912,7 +1087,6 @@ var loop = kontra.gameLoop({
     }
     for (var i = 0; i < links.length; i++) {
       links[i].render();
-      links[i].drawStats();
     }
     for (var i = 0; i < routers.length; i++) {
       routers[i].drawStats();
