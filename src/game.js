@@ -176,7 +176,7 @@ var PERSON_HEIGHT = 40;
 
 // Change this to make the game easier/harder!
 var NUM_ROUTERS = 3;
-var NUM_PEOPLE = 24;
+var NUM_PEOPLE = 16;
 
 // The compatibility of two love types are relative to how close their IDs are (in a circular list's sense)
 var LOVE_TYPES = [
@@ -201,7 +201,7 @@ var LOVE_TYPES = [
     color: 'violet'
   },
   { // Leo
-    id: 4,
+    id: 4, 
     symbol: '\u264C',
     color: 'crimson'
   },
@@ -248,12 +248,11 @@ var cursor = kontra.sprite({
   y: -100,
   typeId: CURSOR_TYPE,
   color: 'pink',
-  fullColor: 'magenta',
+  boldColor: 'magenta',
   width: 10,
   height: 10,
   radius: 5,
   wifiDrain: 20,
-  hypnoPower: 10,
   isInCanvas: false,
   cx: function() {
     return this.x + this.radius
@@ -277,86 +276,128 @@ var link = function(entity1, entity2) {
     entity1: entity1,
     entity2: entity2,
     linkColor: cursor.color,
-    matchLevel: 0,
-    maxMatchLevel: 100,
-    matchScore: 0,
-    matchPenaltyMultiplier: 1.5,
-    scorePenalty: 7,
-    scorePenaltyMultiplier: 1.2,
-    successEvent: null,
-    isMatch: function() {
-      return this.matchLevel != 0;
+    lovePower: 0,
+    maxLovePower: 100,
+    hSize: 60,
+    hx: function() {
+      return Math.floor(this.entity1.cx() - (this.entity1.cx()-this.entity2.cx())/2)
     },
-    updateState: function() {
-      if (this.entity1.isFullyHypnotized() && this.entity2.isFullyHypnotized()) {
-        this.entity1.hypnoColor = cursor.fullColor;
-        this.entity2.hypnoColor = cursor.fullColor;
-        this.linkColor = cursor.fullColor;
-        this.success();
-      }
+    hy: function() {
+      return Math.floor(this.entity1.cy() - (this.entity1.cy()-this.entity2.cy())/2);
+    },
+    isMatch: function() {
+      return entity1.typeId != CURSOR_TYPE;
+    },
+    isPerfectMatch: function() {
+      return entity1.typeId == entity2.typeId;
+    },
+    collidesWithCursor: function() {
+      let dx = cursor.cx() - this.hx();
+      let dy = cursor.cy() - this.hy();
+      return Math.abs(dx) <= this.hSize/2 && Math.abs(dy) <= this.hSize/2;
     },
     render: function() {
-      this.context.strokeStyle = this.linkColor
-      this.context.beginPath();
-      this.context.moveTo(this.entity1.cx(), this.entity1.cy());
-      this.context.lineTo(this.entity2.cx(), this.entity2.cy());
-      this.context.stroke();
+      ctx.strokeStyle = this.linkColor
+      ctx.beginPath();
+      ctx.moveTo(this.entity1.cx(), this.entity1.cy());
+      ctx.lineTo(this.entity2.cx(), this.entity2.cy());
+      ctx.stroke();
     },
     drawStats: function() {
       if (this.isMatch()) {
-        ctx.font = "11px Arial";
-        ctx.fillStyle = entity1.hypnoColor;
-        ctx.fillText(this.entity1.hypnoLevel+"%", parseInt(this.entity1.x-this.entity1.radiusX*0.15), parseInt(this.entity1.y-this.entity1.radiusY*0.3));
-        ctx.fillStyle = entity2.hypnoColor;
-        ctx.fillText(this.entity2.hypnoLevel+"%", parseInt(this.entity2.x-this.entity2.radiusX*0.15), parseInt(this.entity2.y-this.entity2.radiusY*0.3));
         this.entity1.drawLoveType();
-        this.entity2.drawLoveType();
+      }
+      this.entity2.drawLoveType();
+      if (this.isPerfectMatch()) {
+        let x = this.hx() - this.hSize/3;
+        let y = this.hy() + this.hSize/4;
+        let gradient = ctx.createLinearGradient(x,y-this.hSize,x,y);
+        gradient.addColorStop(0, cursor.color);
+        gradient.addColorStop((0.9 - 0.9/this.maxLovePower*this.lovePower).toFixed(2), cursor.color);
+        gradient.addColorStop(1.0, cursor.boldColor);
+        ctx.font = this.hSize+"px Courier";
+        ctx.fillStyle = gradient;
+        ctx.fillText("\u2665", x, y);
+      }
+    },
+    boostLove: {
+      timer: null,
+      boostInterval: 150,
+      boostAmount: 10,
+      start: function() {
+        if (this.timer == null) {
+          var self = this;
+          this.timer = window.setInterval(function(){ self.run(); }, this.boostInterval);
+        }
+      },
+      run: function() {
+        // Boost speed is reduced when hovering over multiple hearts at the same time
+        this.parent.lovePower += this.boostAmount/cursor.numBoostLove;
+        if (this.parent.lovePower >= this.parent.maxLovePower) {
+          this.stop();
+          this.parent.success();
+        }
+      },
+      stop: function() {
+        if (this.timer != null) {
+          window.clearInterval(this.timer);
+          this.timer = null;
+        }
+      }
+    },
+    drainLove: {
+      timer: null,
+      drainInterval: 150,
+      drainAmount: 10,
+      start: function() {
+        if (this.timer == null) {
+          var self = this;
+          this.timer = window.setInterval(function(){ self.run(); }, this.drainInterval);
+        }
+      },
+      run: function() {
+        if (this.parent.boostLove.timer == null) {
+          this.parent.lovePower -= this.drainAmount;
+          if (this.parent.lovePower <= 0) {
+            this.stop();
+            this.parent.destroy();
+          }
+        }
+      },
+      stop: function() {
+        if (this.timer != null) {
+          window.clearInterval(this.timer);
+          this.timer = null;
+        }
       }
     },
     success: function() {
       var self = this;
-      gameMaster.score.addScore(this.matchScore);
-      this.successEvent = window.setTimeout(function(){ 
-        let entity1 = self.entity1;
-        let entity2 = self.entity2;
-        self.destroy(); 
-        entity1.destroy();
-        entity2.destroy();
-        seq_match.play();
-        if (people.length == 0) {
+      gameMaster.score.addScore();
+      self.destroy();
+      self.entity1.destroy();
+      self.entity2.destroy();
+      seq_match.play();
+      if (people.length == 0) {
+        window.setTimeout(function() {
           gameMaster.time.stop();
           gameMaster.isGameOver = true;
-        }
-        self.successEvent = null;
-      }, 1000);
+        }, 1000)
+      }
     },
     init: function() {
-      entity1.link = this;
-      entity2.link = this;
-      if (entity1.typeId != CURSOR_TYPE) {
-        let typeDiff = Math.abs(this.entity1.typeId - this.entity2.typeId);
-        let typeDiffPenalty = Math.min(typeDiff, LOVE_TYPES.length-typeDiff);
-        let matchPenalty = Math.min(typeDiffPenalty, LOVE_TYPES.length-typeDiffPenalty) * this.maxMatchLevel / LOVE_TYPES.length;
-        this.matchLevel = Math.ceil(this.maxMatchLevel - matchPenalty * this.matchPenaltyMultiplier);
-        this.matchScore = Math.ceil(this.maxMatchLevel - this.scorePenalty * typeDiffPenalty * this.scorePenaltyMultiplier);
-        if (this.matchScore == this.matchLevel) {
-          this.matchScore *= 1.5  // bonus score for perfect match
-        }
-        entity1.hypnoLevel = this.matchLevel;
-        entity2.hypnoLevel = this.matchLevel;
-        this.updateState();
+      this.entity1.link = this;
+      this.entity2.link = this;
+      this.boostLove.parent = this;
+      this.drainLove.parent = this;
+      if (this.isPerfectMatch()) {
+        this.linkColor = cursor.boldColor;
       }
       return this;
     },
     destroy: function() {
       let linkIndex = links.indexOf(this);
       links.splice(linkIndex, 1);
-      if (this.isMatch()) {
-        entity1.hypnoLevel = 0;
-        entity1.hypnoColor = cursor.color;
-      }
-      entity2.hypnoLevel = 0;
-      entity2.hypnoColor = cursor.color;
       entity1.link = null;
       entity2.link = null;
     }
@@ -374,16 +415,16 @@ var router = function(x, y) {
     radius: 10,
     wifiPower: 100,
     maxWifiPower: 100,
-    minWifiPower: -30,
+    minWifiPower: -50,
     wifiRange: kontra.sprite({
       color: 'turquoise',
       radius: 200,
       render: function() {
-        this.context.strokeStyle = this.color;
-        this.context.lineWidth = 2;
-        this.context.beginPath();
-        this.context.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
-        this.context.stroke();
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
+        ctx.stroke();
       }
     }),
     cx: function() {
@@ -400,15 +441,6 @@ var router = function(x, y) {
       let dy = cursor.cy() - this.cy();
       return Math.abs(dx) <= this.radius && Math.abs(dy) <= this.radius;
     },
-    isHit: function() {
-      if (this.collidesWithCursor()) {
-        this.drainWifi.start();
-        return true;
-      } else {
-        this.drainWifi.stop();
-        return false;
-      }
-    },
     drawStats: function() {
       if (this.isWifiDown()) {
         ctx.font = "11px Arial";
@@ -422,7 +454,7 @@ var router = function(x, y) {
     drainWifi: {
       timer: null,
       drainInterval: 250,
-      wifiDownDropToPower: -15,
+      wifiDownDropToPower: -20,
       start: function() {
         if (this.timer == null) {
           var self = this;
@@ -434,9 +466,13 @@ var router = function(x, y) {
         if (this.parent.wifiPower > 0) {
           this.parent.wifiPower -= cursor.wifiDrain;
         } else if (this.parent.wifiPower > this.parent.minWifiPower) {
-          this.parent.wifiPower -= cursor.wifiDrain / 5;
-          if (this.parent.wifiPower < this.parent.minWifiPower) {
-            this.parent.wifiPower = this.parent.minWifiPower
+          if (this.parent.wifiPower > this.wifiDownDropToPower) {
+            this.parent.wifiPower = this.wifiDownDropToPower*1.1;
+          } else {
+            this.parent.wifiPower -= cursor.wifiDrain / 4;
+            if (this.parent.wifiPower < this.parent.minWifiPower) {
+              this.parent.wifiPower = this.parent.minWifiPower
+            }
           }
         }
         if (oldWifiPower > 0 && this.parent.wifiPower <= 0) {
@@ -445,7 +481,7 @@ var router = function(x, y) {
           for (var i = 0; i < people.length; i++) {
             let thisPerson = people[i];
             if (thisPerson.hasMatch() && !thisPerson.hasWifi()) {
-              thisPerson.breakHypno.stop();
+              thisPerson.link.drainLove.stop();
             }
           };
         }
@@ -473,15 +509,15 @@ var router = function(x, y) {
               this.parent.wifiPower = this.parent.maxWifiPower;
             }
           } else {
-            this.parent.wifiPower += 0.2;
+            this.parent.wifiPower += 0.25;
           }
         }
         if (oldWifiPower <= 0 && this.parent.wifiPower > 0) {
           seq_wifiup.play();
           for (var i = 0; i < people.length; i++) {
             let thisPerson = people[i];
-            if (thisPerson.hasMatch() && thisPerson.hasWifi() && !thisPerson.isFullyHypnotized()) {
-              thisPerson.breakHypno.start();
+            if (thisPerson.hasMatch() && thisPerson.hasWifi()) {
+              thisPerson.link.drainLove.start();
             }
           };
         }
@@ -515,21 +551,18 @@ var person = function(x, y, typeId) {
     y: y,
     typeId: typeId,
     color: 'antiquewhite',
-    hypnoColor: cursor.color,
     width: PERSON_WIDTH,
     height: PERSON_HEIGHT,
     radiusX: 10,
     radiusY: 20,
-    hypnoLevel: 0,
-    maxHypnoLevel: 100,
     phone: kontra.sprite({
       color: 'black',
       width: 10,
       height: 18,
       render: function() {
         this.draw();
-        this.context.fillStyle = 'lightgrey';
-        this.context.fillRect(this.x+1, this.y+2, this.width-2, this.height-4);
+        ctx.fillStyle = 'lightgrey';
+        ctx.fillRect(this.x+1, this.y+2, this.width-2, this.height-4);
       }
     }),
     cx: function() {
@@ -541,9 +574,6 @@ var person = function(x, y, typeId) {
     isHypnotized: function() {
       return this.link != null;
     },
-    isFullyHypnotized: function() {
-      return this.hypnoLevel == this.maxHypnoLevel;
-    },
     hasMatch: function() {
       return this.isHypnotized() && this.link.isMatch();
     },
@@ -551,31 +581,6 @@ var person = function(x, y, typeId) {
       let dx = cursor.cx() - this.cx();
       let dy = cursor.cy() - this.cy();
       return Math.abs(dx) <= this.radiusX && Math.abs(dy) <= this.radiusY;
-    },
-    isHit: function() {
-      if (this.collidesWithCursor()) {
-        if (this.hasMatch() && this.hypnoLevel < this.maxHypnoLevel) {
-          this.hypnoLevel += Math.min(cursor.hypnoPower, this.maxHypnoLevel - this.hypnoLevel);
-          if (this.isFullyHypnotized()) {
-            this.hypnoColor = cursor.fullColor;
-            this.breakHypno.stop();
-            this.link.updateState();
-          }
-        } else if (!this.hasWifi() && !this.isHypnotized()) {
-          seq_click.play()
-          if (!cursor.isLinking()) {
-            links.push(link(cursor, this));
-          } else {
-            let entity = cursor.link.entity2;
-            cursor.link.destroy();
-            links.push(link(entity, this));
-          }
-        } else {
-          return false;
-        }
-        return true;
-      }
-      return false;
     },
     hasWifi: function() {
       for (var i = 0; i < routers.length; i++) {
@@ -592,41 +597,19 @@ var person = function(x, y, typeId) {
       }
       return false;
     },
-    breakHypno: {
-      timer: null,
-      breakInterval: 25,
-      start: function() {
-        if (this.timer == null) {
-          var self = this;
-          this.timer = window.setInterval(function(){ self.run(); }, this.breakInterval);
-        }
-      },
-      run: function() {
-        if (this.parent.hypnoLevel == 0) {
-          this.stop();
-          if (this.parent.link != null) {
-            this.parent.link.destroy();
-          }
-        } else {
-          this.parent.hypnoLevel -= 1
-        }
-      },
-      stop: function() {
-        if (this.timer != null) {
-          window.clearInterval(this.timer);
-          this.timer = null;
-        }
-      }
-    },
     render: function() {
       this.draw();
       if (this.hasWifi() && !this.isHypnotized()) {
         this.phone.render();
       }
       if (this.isHypnotized()) {
-        this.context.strokeStyle = this.hypnoColor;
-        this.context.lineWidth = 3;
-        this.context.strokeRect(this.x-1, this.y-1, this.width+2, this.height+2);
+        if (this.link.isPerfectMatch()) {
+          ctx.strokeStyle = cursor.boldColor;
+        } else {
+          ctx.strokeStyle = cursor.color;
+        }
+        ctx.lineWidth = 3;
+        ctx.strokeRect(this.x-1, this.y-1, this.width+2, this.height+2);
       }
       if (DISPLAY_LOVE_TYPES) {
         this.drawLoveType();
@@ -641,7 +624,6 @@ var person = function(x, y, typeId) {
     init: function() {
       this.phone.x = this.x + this.width*0.75;
       this.phone.y = this.y + this.height*0.25;
-      this.breakHypno.parent = this;
       return this;
     },
     destroy: function() {
@@ -652,23 +634,6 @@ var person = function(x, y, typeId) {
 };
 var people = []
 
-kontra.pointer.onDown(function(event, object) {
-  //console.log(cursor.x + ' ' + cursor.y);
-  if (!gameMaster.isGameOver) {
-    for (var i = 0; i < people.length; i++) {
-      if (people[i].isHit()) {
-        if (people[i].hasMatch() && cursor.isLinking()) {
-          cursor.link.destroy();  // Destroy cursor-to-person link after person is matched
-        }
-        return;
-      }
-    }
-    if (cursor.isLinking()) {
-      cursor.link.destroy();  // Destroy cursor-to-person link if nothing is hit
-    }
-  }
-});
-
 // for debugging
 SPAWN_ROUTERS = true;
 RANDOM_SPAWN = true;
@@ -677,13 +642,14 @@ var gameMaster = {
   isGameOver: false,
   score: {
     value: 0,
+    pointPerMatch: 100,
     newScores: [],
     addScoreEvent: null,
-    addScore: function(newScore) {
+    addScore: function() {
       var self = this;
-      this.newScores.push(newScore);
+      this.newScores.push(this.pointPerMatch);
       this.addScoreEvent = window.setTimeout(function() {
-        self.value += newScore;
+        self.value += self.pointPerMatch;
         self.newScores.splice(0,1);
         self.addScoreEvent = null;
       }, 1000);
@@ -693,7 +659,7 @@ var gameMaster = {
       ctx.fillStyle = 'black';
       ctx.fillText(this.value, 8, 16);
       if (this.newScores.length > 0) {
-        ctx.fillStyle = cursor.fullColor;
+        ctx.fillStyle = cursor.boldColor;
         ctx.fillText("+"+this.newScores.reduce(function(total,num){ return total+num; }), 8, 32);
       }
     },
@@ -763,7 +729,7 @@ var gameMaster = {
         gameText = "TIME'S UP!";
       }
       ctx.font = "48px Arial";
-      ctx.fillStyle = cursor.fullColor;
+      ctx.fillStyle = cursor.boldColor;
       ctx.fillText(gameText, 150, 120);
       ctx.font = "16px Arial";
       ctx.fillText("TIME BONUS: "+timeBonus, 200, 185);
@@ -775,12 +741,6 @@ var gameMaster = {
     this.isGameOver = false;
     this.score.reset();
     this.time.reset();
-    for (var i = 0; i < links.length; i++) {
-      if (links[i].successEvent != null) {
-        window.clearInterval(links[i].successEvent);
-        links[i].successEvent = null;
-      }
-    }    
     people.splice(0, people.length)
     routers.splice(0, routers.length)
     links.splice(0, links.length)
@@ -856,6 +816,37 @@ var gameMaster = {
   }
 }.load();
 
+kontra.pointer.onDown(function(event, object) {
+  //console.log(cursor.x + ' ' + cursor.y);
+  if (!gameMaster.isGameOver) {
+    for (var i = 0; i < people.length; i++) {
+      if (people[i].collidesWithCursor()) {
+        if (!people[i].hasWifi()) {
+          seq_click.play()
+          if (people[i].hasMatch() && !people[i].link.isPerfectMatch()) {
+            people[i].link.destroy();
+          }
+          if (!cursor.isLinking()) {
+            links.push(link(cursor, people[i]));
+          } else {
+            let entity = cursor.link.entity2;
+            cursor.link.destroy(); // Destroy cursor-to-person link after person is matched
+            if (people[i] != entity) {
+              links.push(link(entity, people[i]));
+            }
+          }
+        } else if (!cursor.isLinking()) {
+          cursor.link.destroy();  // Destroy cursor-to-person link if person with phone is hit
+        }
+        return;
+      }
+    }
+    if (cursor.isLinking()) {
+      cursor.link.destroy();  // Destroy cursor-to-person link if no person is hit
+    }
+  }
+});
+
 // RESTART GAME
 kontra.keys.bind('r', function() {
   gameMaster.load();
@@ -888,8 +879,27 @@ var loop = kontra.gameLoop({
       cursor.y = kontra.pointer.y * canvasWidthRatio;
     }
     if (!gameMaster.isGameOver) {
-      for (var i = 0; i < routers.length; i++) {
-        routers[i].isHit();
+      let numBoostLove = 0;
+      for (var i = 0; i < links.length; i++) {
+        if (links[i].isPerfectMatch()) {
+          if (links[i].collidesWithCursor()) {
+            links[i].boostLove.start();
+            numBoostLove++;
+          } else {
+            links[i].boostLove.stop();
+          }
+        }
+      }
+      cursor.numBoostLove = numBoostLove;
+        if (numBoostLove == 0) {
+        // Only can drain wifi when not boosting love
+        for (var i = 0; i < routers.length; i++) {
+          if (routers[i].collidesWithCursor()) {
+            routers[i].drainWifi.start();
+          } else {
+            routers[i].drainWifi.stop();
+          }
+        }
       }
     }
   },
