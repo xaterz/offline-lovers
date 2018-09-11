@@ -249,11 +249,13 @@ var cursor = kontra.sprite({
   typeId: CURSOR_TYPE,
   color: 'pink',
   boldColor: 'magenta',
-  width: 10,
-  height: 10,
-  radius: 5,
+  radius: 3,
   wifiDrain: 20,
   isInCanvas: false,
+  wingSpanX: 7,
+  wingSpanY: 2,
+  wingTipX: 12,
+  wingTipY: 10,
   cx: function() {
     return this.x + this.radius
   },
@@ -268,6 +270,22 @@ var cursor = kontra.sprite({
   },
   hideCursor: function() {
     cursor.isInCanvas = false;
+  },
+  render: function() {
+    ctx.strokeStyle = this.color;
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
+    ctx.fill()
+    ctx.lineWidth = 1
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(this.x - this.wingSpanX, this.y - this.wingSpanY);
+    ctx.lineTo(this.x - this.wingTipX, this.y - this.wingTipY);
+    ctx.lineTo(this.x, this.y);
+    ctx.lineTo(this.x + this.wingSpanX, this.y - this.wingSpanY);
+    ctx.lineTo(this.x + this.wingTipX, this.y - this.wingTipY);
+    ctx.lineTo(this.x, this.y);
+    ctx.stroke()
   }
 });
 
