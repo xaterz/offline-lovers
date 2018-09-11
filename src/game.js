@@ -885,6 +885,7 @@ var game = {
           this.screenTimer = window.setTimeout(function() {
             game.state = game.states.INLEVEL;
             let level = game.levels[game.level-1];
+            game.time.stop();
             game.time.init(level.startMin, level.startSec);
             game.screenTimer = null;
           }, 5000);
