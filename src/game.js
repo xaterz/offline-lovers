@@ -174,10 +174,6 @@ var ROUTER_WIDTH = 20;
 var PERSON_WIDTH = 20;
 var PERSON_HEIGHT = 40;
 
-// Change this to make the game easier/harder!
-var NUM_ROUTERS = 3;
-var NUM_PEOPLE = 16;
-
 // The compatibility of two love types are relative to how close their IDs are (in a circular list's sense)
 var LOVE_TYPES = [
   { // Aries
@@ -393,15 +389,14 @@ var link = function(entity1, entity2) {
     },
     success: function() {
       var self = this;
-      gameMaster.score.addScore();
       self.destroy();
       self.entity1.destroy();
       self.entity2.destroy();
-      seq_match.play();
+      //seq_match.play();
       if (people.length == 0) {
         window.setTimeout(function() {
           gameMaster.time.stop();
-          gameMaster.isGameOver = true;
+          gameMaster.endLevel();
         }, 1000)
       }
     },
@@ -606,7 +601,7 @@ var router = function(x, y) {
         }
         if (oldWifiPower > 0 && this.parent.wifiPower <= 0) {
           this.parent.wifiRange.stop();
-          seq_wifidown.play();
+          //seq_wifidown.play();
           this.parent.wifiPower = this.wifiDownDropToPower;
           for (var i = 0; i < people.length; i++) {
             let thisPerson = people[i];
@@ -645,7 +640,7 @@ var router = function(x, y) {
         }
         if (oldWifiPower <= 0 && this.parent.wifiPower > 0) {
           this.parent.wifiRange.start();
-          seq_wifiup.play();
+          //seq_wifiup.play();
           for (var i = 0; i < people.length; i++) {
             let thisPerson = people[i];
             if (thisPerson.hasMatch() && thisPerson.hasWifi()) {
@@ -809,55 +804,40 @@ var person = function(x, y, typeId) {
 };
 var people = []
 
-// for debugging
-SPAWN_ROUTERS = true;
-RANDOM_SPAWN = true;
+// Default settings. Change this to make the game easier/harder!
+var NUM_ROUTERS = 3;
+var NUM_PEOPLE = 16;
+var START_MIN = 4;
+var START_SEC = 0;
+var START_LEVEL = 0;
 
 var gameMaster = {
-  isGameOver: false,
-  score: {
-    value: 0,
-    pointPerMatch: 100,
-    newScores: [],
-    addScoreEvent: null,
-    addScore: function() {
-      var self = this;
-      this.newScores.push(this.pointPerMatch);
-      this.addScoreEvent = window.setTimeout(function() {
-        self.value += self.pointPerMatch;
-        self.newScores.splice(0,1);
-        self.addScoreEvent = null;
-      }, 1000);
-    },
-    render: function() {
-      ctx.font = "14px Arial";
-      ctx.fillStyle = 'black';
-      ctx.fillText(this.value, 8, 16);
-      if (this.newScores.length > 0) {
-        ctx.fillStyle = cursor.boldColor;
-        ctx.fillText("+"+this.newScores.reduce(function(total,num){ return total+num; }), 8, 32);
-      }
-    },
-    reset: function() {
-      this.value = 0;
-      this.newScores = [];
-      window.clearTimeout(this.addScoreEvent);
-    }
-  },
+	state: null,
+  states: {
+		TITLE: 0,
+		STARTLEVEL: 1,
+		INLEVEL: 2,
+		ENDLEVEL: 3
+	},
   time: {
     min: 0,
     sec: 0,
-    startMin: 4,
+    startMin: 0,
     startSec: 0,
     timer: null,
-    init: function() {
+    init: function(startMin, startSec) {
+			this.startMin = startMin;
+			this.startSec = startSec;
+			this.start();
+		},
+		start: function() {
+      var self = this;
       this.min = this.startMin;
       this.sec = this.startSec;
-      var self = this;
       this.timer = window.setInterval(function(){
         if (self.sec == 0) {
           if (self.min == 0) {
-            gameMaster.isGameOver = true;
+            gameMaster.endLevel();
             self.stop();
           } else {
             self.min -= 1;
@@ -867,14 +847,10 @@ var gameMaster = {
           self.sec -= 1;
         }
       }, 1000);
-      return this;
     },
     stop: function() {
       window.clearInterval(this.timer);
       this.timer = null;
-    },
-    getTimeBonus: function() {
-      return (this.min*60 + this.sec)*3;
     },
     render: function() {
       ctx.fillStyle = 'black'
@@ -891,113 +867,194 @@ var gameMaster = {
     },
     reset: function() {
       this.stop();
-      this.init();
-    }
-  }.init(),
-  winScreen: {
-    render: function() {
-      let timeBonus = gameMaster.time.getTimeBonus();
-      let gameText = "";
-      if (timeBonus > 0) {
-        gameText = "YOU WIN!";
-      } else {
-        gameText = "TIME'S UP!";
-      }
-      ctx.font = "48px Arial";
-      ctx.fillStyle = cursor.boldColor;
-      ctx.fillText(gameText, 150, 120);
-      ctx.font = "16px Arial";
-      ctx.fillText("TIME BONUS: "+timeBonus, 200, 185);
-      ctx.font = "36px Arial";
-      ctx.fillText("FINAL SCORE: "+(parseInt(gameMaster.score.value)+parseInt(timeBonus)), 110, 240);
+      this.start();
     }
   },
-  load: function() {
-    this.isGameOver = false;
-    this.score.reset();
+  screens: [
+		{ // TITLE
+			render: function() {
+
+			}
+		},
+		{ // STARTLEVEL
+			render: function() {
+				ctx.font = "16px Arial";
+				ctx.fillStyle = cursor.boldColor;
+				ctx.fillText("LEVEL "+gameMaster.level, 150, 150);
+				ctx.font = "8px Arial";
+				ctx.fillText("Get ready!", 150, 180);
+				window.setTimeout(function() {
+					gameMaster.state = gameMaster.states.INLEVEL;
+					gameMaster.load(gameMaster.level);
+				}, 5000);
+			}
+		},
+		{ // INLEVEL
+			render: function() {
+				gameMaster.time.render;
+			}
+		},
+		{ // ENDLEVEL
+			gameText: "",
+			gameSubText: "",
+			minLeft: 0,
+			secLeft: 0,
+			set: function() {
+				let totalSecLeft = gameMaster.time.min*60 + gameMaster.time.sec;
+				if (totalSecLeft > 0) {
+					let totalSecAtStart = gameMaster.time.startMin*60 + gameMaster.time.startSec;
+					let totalSecTaken = totalSecAtStart - totalSecLeft;
+					this.minLeft = Math.floor(totalSecTaken/60);
+					this.secLeft = totalSecTaken%60;
+					if (this.secLeft > 0) this.secLeft = "0"+this.secLeft;
+					this.gameText = "LEVEL CLEARED!";
+					this.gameSubText = "Time taken: " + this.minLeft + ":" + this.secLeft;
+				} else {
+					this.gameText = "GAME OVER!";
+					this.gameSubText = "You ran out of time!";
+				}
+				window.setTimeout(function() {
+					gameMaster.state = gameMaster.states.STARTLEVEL;
+					if (gameMaster.level > 0) {
+					  gameMaster.level += 1;
+					}
+				}, 8000);
+			}
+			render: function() {
+				ctx.font = "16px Arial";
+				ctx.fillStyle = cursor.boldColor;
+				ctx.fillText(gameText, 150, 150);
+				ctx.font = "8px Arial";
+				ctx.fillText(gameSubText, 150, 180);
+			}
+		}
+  ],
+	reset: function() {
     this.time.reset();
-    people.splice(0, people.length)
-    routers.splice(0, routers.length)
-    links.splice(0, links.length)
-    if (RANDOM_SPAWN) {
-      let routerSpawnFieldRatio = 0.5;
-      let routerSpawnFieldRatioMin = 0.2;
-      let routerSpawnFieldRatioMax = 0.7;
-      let personSpawnFieldRatioMin = 0.05;
-      let personSpawnFieldRatioMax = 0.85;
-      let personalSpaceRatio = 1.5;
+    people.splice(0, people.length);
+    routers.splice(0, routers.length);
+    links.splice(0, links.length);
+	},
+	level: 0,
+	levels: [
+		{ // LEVEL 1
+			numRouters: 1,
+			numPeople: 12,
+			startMin: 1,
+			startSec: 30
+		},
+		{ // LEVEL 2
+			numRouters: 2,
+			numPeople: 16,
+			startMin: 2,
+			startSec: 15
+		},
+		{ // LEVEL 3
+			numRouters: 3,
+			numPeople: 20,
+			startMin: 3,
+			startSec: 0
+		},
+		{ // LEVEL 4
+			numRouters: 4,
+			numPeople: 22,
+			startMin: 3,
+			startSec: 30
+		},
+		{ // LEVEL 5
+			numRouters: 5,
+			numPeople: 24,
+			startMin: 4,
+			startSec: 0
+		},
+	]
+  loadLevel: function(level) {
+		let routerSpawnFieldRatio = 0.5;
+		let routerSpawnFieldRatioMin = 0.2;
+		let routerSpawnFieldRatioMax = 0.7;
+		let personSpawnFieldRatioMin = 0.05;
+		let personSpawnFieldRatioMax = 0.85;
+		let personalSpaceRatio = 1.5;
 
-      if (SPAWN_ROUTERS) {
-        while (routers.length < NUM_ROUTERS) {
-          let x = Math.floor((Math.random() * (routerSpawnFieldRatioMax - routerSpawnFieldRatioMin) + routerSpawnFieldRatioMin) * canvasMaxWidth * canvasWidthRatio);
-          let y = Math.floor((Math.random() * (routerSpawnFieldRatioMax - routerSpawnFieldRatioMin) + routerSpawnFieldRatioMin) * canvasMaxHeight * canvasWidthRatio);
-          let isTooClose = false;    
-          for (var i = 0; i < routers.length; i++) {
-            if (Math.abs(routers[i].x - x) < canvasMaxWidth*canvasWidthRatio*routerSpawnFieldRatio/NUM_ROUTERS && Math.abs(routers[i].y - y) < canvasMaxHeight*canvasWidthRatio*routerSpawnFieldRatio/NUM_ROUTERS) {
-              isTooClose = true;
-              break;
-            }
-          }
-          if (!isTooClose) {
-            routers.push(router(x, y));
-          }
-        }
-      }
+		this.state = this.states.INLEVEL;
+		
+		let numRouters = 0;
+		let numPeople = 0;
+		let startMin = 0;
+		let startSec = 0;
+		if (level > 0) {
+			this.level = level;
+			numRouters = this.levels[level-1].numRouters;
+			numPeople = this.levels[level-1].numPeople;
+			startMin = this.levels[level-1].startMin;
+			startSec = this.levels[level-1].startSec;
+		} else {
+			numRouters = NUM_ROUTERS;
+			numPeople = NUM_PEOPLE;
+			startMin = START_MIN;
+			startSec = START_SEC;
+		}
+		
+		while (routers.length < numRouters) {
+			let x = Math.floor((Math.random() * (routerSpawnFieldRatioMax - routerSpawnFieldRatioMin) + routerSpawnFieldRatioMin) * canvasMaxWidth * canvasWidthRatio);
+			let y = Math.floor((Math.random() * (routerSpawnFieldRatioMax - routerSpawnFieldRatioMin) + routerSpawnFieldRatioMin) * canvasMaxHeight * canvasWidthRatio);
+			let isTooClose = false;    
+			for (var i = 0; i < routers.length; i++) {
+				if (Math.abs(routers[i].x - x) < canvasMaxWidth*canvasWidthRatio*routerSpawnFieldRatio/numRouters && Math.abs(routers[i].y - y) < canvasMaxHeight*canvasWidthRatio*routerSpawnFieldRatio/numRouters) {
+					isTooClose = true;
+					break;
+				}
+			}
+			if (!isTooClose) {
+				routers.push(router(x, y));
+			}
+		}
 
-      let index = 0;
-      if (NUM_PEOPLE % 2 == 1) { NUM_PEOPLE -= 1; }
-      while (people.length < NUM_PEOPLE) {
-        if (index >= LOVE_TYPES.length*2) { index = 0; }
-        let loveTypeIndex = Math.floor(index / 2);
-        let x = Math.floor((Math.random() * (personSpawnFieldRatioMax - personSpawnFieldRatioMin) + personSpawnFieldRatioMin) * canvasMaxWidth * canvasWidthRatio);
-        let y = Math.floor((Math.random() * (personSpawnFieldRatioMax - personSpawnFieldRatioMin) + personSpawnFieldRatioMin) * canvasMaxHeight * canvasWidthRatio);
-        let isTooClose = false;
-        for (var i = 0; i < routers.length; i++) {
-          if (Math.abs(routers[i].x - x) < PERSON_WIDTH*personalSpaceRatio && Math.abs(routers[i].y - y) < PERSON_HEIGHT*personalSpaceRatio) {
-            isTooClose = true;
-            break;
-          }
-        }
-        if (isTooClose) continue;
-        for (var i = 0; i < people.length; i++) {
-          if (Math.abs(people[i].x - x) < PERSON_WIDTH*personalSpaceRatio && Math.abs(people[i].y - y) < PERSON_HEIGHT*personalSpaceRatio) {
-            isTooClose = true;
-            break;
-          }
-        }
-        if (!isTooClose) {
-          let newPerson = person(x, y, loveTypeIndex);
-          if (newPerson.hasWifi()) {
-            people.push(newPerson);
-            index += 1;
-          }
-        }
-      }
-    } else {
-      if (SPAWN_ROUTERS) {
-        routers.push(router(150, 150));
-        routers.push(router(250, 280));
-      }
-      people.push(person(70, 100, 0));
-      people.push(person(120, 280, 3));
-      people.push(person(300, 150, 6));
-      people.push(person(225, 38, 9));
-      people.push(person(400, 50, 0));
-      people.push(person(330, 330, 3));
-      people.push(person(420, 240, 6));
-      people.push(person(175, 230, 9));
-    }
+		let index = 0;
+		if (numPeople % 2 == 1) { numPeople -= 1; }
+		while (people.length < numPeople) {
+			if (index >= LOVE_TYPES.length*2) { index = 0; }
+			let loveTypeIndex = Math.floor(index / 2);
+			let x = Math.floor((Math.random() * (personSpawnFieldRatioMax - personSpawnFieldRatioMin) + personSpawnFieldRatioMin) * canvasMaxWidth * canvasWidthRatio);
+			let y = Math.floor((Math.random() * (personSpawnFieldRatioMax - personSpawnFieldRatioMin) + personSpawnFieldRatioMin) * canvasMaxHeight * canvasWidthRatio);
+			let isTooClose = false;
+			for (var i = 0; i < routers.length; i++) {
+				if (Math.abs(routers[i].x - x) < PERSON_WIDTH*personalSpaceRatio && Math.abs(routers[i].y - y) < PERSON_HEIGHT*personalSpaceRatio) {
+					isTooClose = true;
+					break;
+				}
+			}
+			if (isTooClose) continue;
+			for (var i = 0; i < people.length; i++) {
+				if (Math.abs(people[i].x - x) < PERSON_WIDTH*personalSpaceRatio && Math.abs(people[i].y - y) < PERSON_HEIGHT*personalSpaceRatio) {
+					isTooClose = true;
+					break;
+				}
+			}
+			if (!isTooClose) {
+				let newPerson = person(x, y, loveTypeIndex);
+				if (newPerson.hasWifi()) {
+					people.push(newPerson);
+					index += 1;
+				}
+			}
+		}
     return this;
-  }
-}.load();
+  },
+	endLevel: function() {
+		this.state = this.states.ENDLEVEL;
+		this.screens[this.state].set();
+		this.reset();
+	}
+}.loadLevel(START_LEVEL);
 
 kontra.pointer.onDown(function(event, object) {
   //console.log(cursor.x + ' ' + cursor.y);
-  if (!gameMaster.isGameOver) {
+  if (gameMaster.state == gameMaster.states.INLEVEL) {
     for (var i = 0; i < people.length; i++) {
       if (people[i].collidesWithCursor()) {
         if (!people[i].hasWifi()) {
-          seq_click.play()
+          //seq_click.play()
           if (people[i].hasMatch() && !people[i].link.isPerfectMatch()) {
             people[i].link.destroy();
           }
@@ -1024,7 +1081,8 @@ kontra.pointer.onDown(function(event, object) {
 
 // RESTART GAME
 kontra.keys.bind('r', function() {
-  gameMaster.load();
+	gameMaster.reset();
+  gameMaster.loadLevel();
 })
 
 // INSTANT WIN (for debugging)
@@ -1034,10 +1092,9 @@ kontra.keys.bind('z', function() {
 })
 kontra.keys.bind('x', function() {
   people.splice(0, people.length);
-  gameMaster.score.addScore(400);
   window.setTimeout(function(){
     gameMaster.time.stop();
-    gameMaster.isGameOver = true;
+    gameMaster.endLevel();
   }, 1000);
 })
 
@@ -1053,7 +1110,7 @@ var loop = kontra.gameLoop({
       cursor.x = kontra.pointer.x * canvasWidthRatio;
       cursor.y = kontra.pointer.y * canvasWidthRatio;
     }
-    if (!gameMaster.isGameOver) {
+    if (gameMaster.state == gameMaster.states.INLEVEL) {
       let numBoostLove = 0;
       for (var i = 0; i < links.length; i++) {
         if (links[i].isPerfectMatch()) {
@@ -1094,16 +1151,11 @@ var loop = kontra.gameLoop({
     if (cursor.isInCanvas) {
       cursor.render();
     }
-    if (!gameMaster.isGameOver) {
-      gameMaster.score.render();
-      gameMaster.time.render();
-    } else {
-      gameMaster.winScreen.render();
-    }
+    gameMaster.screens[gameMaster.state].render();
   }
 });
 
 loop.start();
-when = ac.currentTime;
+/*when = ac.currentTime;
 seq_melody.play(when);
-seq_bass.play(when + ( 60 / tempo ) * 1 );
+seq_bass.play(when + ( 60 / tempo ) * 1 );*/
