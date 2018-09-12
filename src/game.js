@@ -151,6 +151,22 @@ var match = [
   'G3 0.25',
   'G4 0.1'
   ]
+
+var fanfare = [
+  'C4  2',
+  'B3  1.5',
+  'F3  0.5',
+  'A3  1',
+  'G3  1',
+  'F3  1',
+  'D3  1',
+  'C3  1',
+  'B2  0.5',
+  'C3  0.5',
+  'D3  1',
+  'G2  1',
+  'C3  1',
+  ]
 var seq_wifidown = new TinyMusic.Sequence( ac, 180, wifi_down);
 seq_wifidown.gain.gain.value = 0.05;
 seq_wifidown.smoothing = 0.2;
@@ -169,6 +185,11 @@ seq_match.loop = false
 var seq_click = new TinyMusic.Sequence( ac, 180, ['G3 0.25']);
 seq_click.gain.gain.value = 0.05;
 seq_click.loop = false
+
+var seq_fanfare = new TinyMusic.Sequence( ac, 160, fanfare);
+seq_fanfare.waveType = "triangle";
+seq_fanfare.staccato = 0.1;
+seq_fanfare.loop = false;
 
 var ROUTER_WIDTH = 20;
 var PERSON_WIDTH = 15;
@@ -864,6 +885,7 @@ RANDOM_SPAWN = true;
 
 var gameMaster = {
   isGameOver: false,
+  isFanfarePlayed: false,
   score: {
     value: 0,
     pointPerMatch: 100,
@@ -1147,7 +1169,13 @@ var loop = kontra.gameLoop({
       gameMaster.score.render();
       gameMaster.time.render();
     } else {
+      seq_melody.stop()
+      seq_bass.stop()
       gameMaster.winScreen.render();
+      if (!gameMaster.isFanfarePlayed) {
+        seq_fanfare.play()
+        gameMaster.isFanfarePlayed = true;
+      }
     }
   }
 });
