@@ -13,7 +13,7 @@ This is you. Move around with the **mouse**.
 These are people. You have to pair them with someone `compatible`. But you have to get them off their phones first...  
 ![image](https://user-images.githubusercontent.com/12347266/45442047-83d6ca00-b6f3-11e8-9c49-fe9bbc2b1694.png)
 These are Wi-Fi Hotspots. People tend to congregate around them. **Hovering** over them might cause some strange magical interference...  
-![image](https://user-images.githubusercontent.com/12347266/45442369-69512080-b6f4-11e8-8a4b-a34240c5c994.png)  
+![image](https://user-images.githubusercontent.com/12347266/45443551-9fdc6a80-b6f7-11e8-9f9a-63b2a339ddbe.png)
 Love takes time! But you have a deadline to meet and a quota to fill. **Hover** over the heart to expedite the process!
 
 ## Libraries Used
