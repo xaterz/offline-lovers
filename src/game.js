@@ -999,8 +999,8 @@ var game = {
   }),
   nextState: function() {
     let state = game.state + 1;
-    if (state >= game.states.length) {
-      state = game.state.STARTLEVEL;
+    if (state >= game.states.ENDLEVEL) {
+      state = game.states.STARTLEVEL;
     }
     game.load(game.level, state);
     game.screenTimer = null;
