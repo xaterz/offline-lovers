@@ -181,6 +181,22 @@ var bass_2 = [
   'E3  1',
   ]
 
+var fanfare = [
+  'C4  2',
+  'B3  1.5',
+  'F3  0.5',
+  'A3  1',
+  'G3  1',
+  'F3  1',
+  'D3  1',
+  'C3  1',
+  'B2  0.5',
+  'C3  0.5',
+  'D3  1',
+  'G2  1',
+  'C3  1',
+  ]
+
 var seq_melody, seq_bass
 
 seq_melody = new TinyMusic.Sequence( ac, tempo, melody);
@@ -194,7 +210,10 @@ seq_bass.smoothing = 0.1;
 seq_bass.waveType = "sine";
 seq_bass.smoothing = 0.1;
 seq_bass.staccato = 0;
-
+var seq_fanfare = new TinyMusic.Sequence( ac, 160, fanfare);
+seq_fanfare.waveType = "triangle";
+seq_fanfare.staccato = 0.1;
+seq_fanfare.loop = false;
 // sfx
 var wifi_down = [
   'G4  0.3',
@@ -232,6 +251,11 @@ document.querySelector('#play').addEventListener('click', function() {
   when = ac.currentTime;
   seq_melody.play(when);
   seq_bass.play(when + ( 60 / tempo ) * 1 );
+}, false );
+
+document.querySelector('#win').addEventListener('click', function() {
+  when = ac.currentTime;
+  seq_fanfare.play(when);
 }, false );
 
 // pause
