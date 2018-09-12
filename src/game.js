@@ -171,8 +171,8 @@ seq_click.gain.gain.value = 0.05;
 seq_click.loop = false
 
 var ROUTER_WIDTH = 20;
-var PERSON_WIDTH = 20;
-var PERSON_HEIGHT = 40;
+var PERSON_WIDTH = 15;
+var PERSON_HEIGHT = 30;
 
 // Change this to make the game easier/harder!
 var NUM_ROUTERS = 3;
@@ -746,16 +746,22 @@ var person = function(x, y, typeId) {
     color: 'antiquewhite',
     width: PERSON_WIDTH,
     height: PERSON_HEIGHT,
-    radiusX: 10,
-    radiusY: 20,
+    radiusX: PERSON_WIDTH / 2,
+    radiusY: PERSON_HEIGHT / 2,
+    headRad: PERSON_WIDTH,
     phone: kontra.sprite({
-      color: 'black',
+      color:'black',
       width: 10,
       height: 18,
       render: function() {
-        this.draw();
+        this.draw()
         ctx.fillStyle = 'lightgrey';
         ctx.fillRect(this.x+1, this.y+2, this.width-2, this.height-4);
+        ctx.fillStyle = 'antiquewhite';
+        ctx.beginPath();
+        ctx.arc(this.x + 3, this.y + 7, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = 'lightgrey';
       }
     }),
     cx: function() {
@@ -773,7 +779,7 @@ var person = function(x, y, typeId) {
     collidesWithCursor: function() {
       let dx = cursor.cx() - this.cx();
       let dy = cursor.cy() - this.cy();
-      return Math.abs(dx) <= this.radiusX && Math.abs(dy) <= this.radiusY;
+      return Math.abs(dx) <= this.radiusX + 2 && Math.abs(dy) <= this.radiusY + this.headRad;
     },
     hasWifi: function() {
       for (var i = 0; i < routers.length; i++) {
@@ -802,8 +808,32 @@ var person = function(x, y, typeId) {
           ctx.strokeStyle = cursor.color;
         }
         ctx.lineWidth = 3;
+        // draw head outline
+        ctx.beginPath();
+        ctx.arc(this.x + this.radiusX, this.y, this.headRad, 0, 2 * Math.PI);
+        ctx.stroke();
+        //draw body outline
         ctx.strokeRect(this.x-1, this.y-1, this.width+2, this.height+2);
+        ctx.strokeStyle = this.color;
       }
+      // draw head
+      ctx.beginPath();
+      ctx.arc(this.x + this.radiusX, this.y, this.headRad, 0, 2 * Math.PI);
+      ctx.fill();
+      // draw eyes
+      ctx.fillStyle = 'black';
+      ctx.font = "12px Courier";
+      if (this.hasWifi() && !this.isHypnotized()) {
+        ctx.fillText("  ._.", this.x-this.radiusX, this.cy()-this.radiusX*2);
+      }
+      else if (this.isHypnotized() && this.link.isPerfectMatch()) {
+        ctx.fillText(" ♥_♥", this.x-this.radiusX, this.cy()-this.radiusX*2);
+      }
+      else if (!this.hasWifi()) {
+        ctx.fillText(" ._.", this.x-this.radiusX, this.cy()-this.radiusX*2);
+      }
+      
+      
       if (DISPLAY_LOVE_TYPES) {
         this.drawLoveType();
       }
@@ -812,10 +842,11 @@ var person = function(x, y, typeId) {
       let loveType = LOVE_TYPES[this.typeId];
       ctx.font = "18px Courier";
       ctx.fillStyle = loveType.color;
-      ctx.fillText(loveType.symbol, this.x+this.radiusX*0.15, this.cy()+this.radiusX*0.6);
+      ctx.fillText(loveType.symbol, this.x-this.radiusX*0.15, this.cy()+this.radiusX*0.6);
     },
     init: function() {
-      this.phone.x = this.x + this.width*0.75;
+      this.phone.parent = this;
+      this.phone.x = this.x + this.width*0.75 + 5;
       this.phone.y = this.y + this.height*0.25;
       return this;
     },
@@ -943,7 +974,7 @@ var gameMaster = {
       let routerSpawnFieldRatioMax = 0.7;
       let personSpawnFieldRatioMin = 0.05;
       let personSpawnFieldRatioMax = 0.85;
-      let personalSpaceRatio = 1.5;
+      let personalSpaceRatio = 2;
 
       if (SPAWN_ROUTERS) {
         while (routers.length < NUM_ROUTERS) {
