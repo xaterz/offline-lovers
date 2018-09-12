@@ -1258,7 +1258,7 @@ kontra.pointer.onDown(function(event, object) {
   if (game.state == game.states.INLEVEL) {
     for (var i = 0; i < people.length; i++) {
       if (people[i].collidesWithCursor()) {
-        if (!people[i].hasWifi()) {
+        if (!people[i].hasWifi() && !(people[i].hasMatch() && people[i].link.isPerfectMatch())) {
           seq_click.play()
           if (people[i].hasMatch() && !people[i].link.isPerfectMatch()) {
             people[i].link.destroy();
