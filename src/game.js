@@ -197,7 +197,6 @@ var PERSON_WIDTH = 15;
 var PERSON_HEIGHT = 30;
 var WIFI_COLOR = "mediumturquoise";
 
-// The compatibility of two love types are relative to how close their IDs are (in a circular list's sense)
 var LOVE_TYPES = [
   { // Aries
     id: 0,
@@ -850,11 +849,6 @@ var person = function(x, y, typeId) {
       else if (!this.hasWifi()) {
         ctx.fillText(" ._.", this.x-this.radiusX, this.cy()-this.radiusX*2);
       }
-      
-      
-      if (DISPLAY_LOVE_TYPES) {
-        this.drawLoveType();
-      }
     },
     drawLoveType: function() {
       let loveType = LOVE_TYPES[this.typeId];
@@ -1125,36 +1119,36 @@ var game = {
       numRouters: 1,
       numPeople: 12,
       startMin: 1,
-      startSec: 0
+      startSec: 30
     },
     { // LEVEL 2
       numRouters: 2,
       numPeople: 14,
       startMin: 2,
-      startSec: 0
+      startSec: 20
     },
     { // LEVEL 3
       numRouters: 2,
       numPeople: 18,
-      startMin: 3,
-      startSec: 0
+      startMin: 2,
+      startSec: 40
     },
     { // LEVEL 4
       numRouters: 3,
       numPeople: 20,
       startMin: 3,
-      startSec: 45
+      startSec: 0
     },
     { // LEVEL 5
       numRouters: 4,
       numPeople: 22,
-      startMin: 4,
+      startMin: 3,
       startSec: 30
     },
     { // LEVEL 6 (BONUS???)
       numRouters: 5,
       numPeople: 24,
-      startMin: 5,
+      startMin: 4,
       startSec: 0
     },
   ],
@@ -1254,7 +1248,6 @@ var game = {
 game.load(START_LEVEL, START_STATE);
 
 kontra.pointer.onDown(function(event, object) {
-  //console.log(cursor.x + ' ' + cursor.y);
   if (game.state == game.states.INLEVEL) {
     for (var i = 0; i < people.length; i++) {
       if (people[i].collidesWithCursor()) {
@@ -1267,56 +1260,25 @@ kontra.pointer.onDown(function(event, object) {
             links.push(link(cursor, people[i]));
           } else {
             let entity = cursor.link.entity2;
-            cursor.link.destroy(); // Destroy cursor-to-person link after person is matched
+            cursor.link.destroy();
             if (people[i] != entity) {
               links.push(link(entity, people[i]));
             }
           }
         } else if (!cursor.isLinking()) {
-          cursor.link.destroy();  // Destroy cursor-to-person link if person with phone is hit
+          cursor.link.destroy();
         }
         return;
       }
     }
     if (cursor.isLinking()) {
-      cursor.link.destroy();  // Destroy cursor-to-person link if no person is hit
+      cursor.link.destroy();
     }
   } else {
     if (game.btn.collidesWithCursor()) {
       game.nextState();
     }
   }
-});
-
-// RESTART GAME
-kontra.keys.bind('r', function() {
-  game.reset();
-  //game.screens[game.states.STARTLEVEL].load()
-  game.load(game.level, game.states.STARTLEVEL);
-})
-
-// INSTANT WIN (for debugging)
-kontra.keys.bind('z', function() {
-  game.time.min = 0;
-  game.time.sec = 0;
-  game.endLevel();
-})
-kontra.keys.bind('x', function() {
-  people.splice(0, people.length);
-  window.setTimeout(function(){
-    game.time.stop();
-    if (game.time.getTotalSecLeft() == 0) {
-      game.time.startMin = 999;
-      game.time.min = 999;
-    }
-    game.endLevel();
-  }, 1000);
-})
-
-// For debugging
-DISPLAY_LOVE_TYPES = false;
-kontra.keys.bind('t', function() {
-  DISPLAY_LOVE_TYPES = !DISPLAY_LOVE_TYPES;
 });
 
 var loop = kontra.gameLoop({
