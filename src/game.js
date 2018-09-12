@@ -173,6 +173,7 @@ seq_click.loop = false
 var ROUTER_WIDTH = 20;
 var PERSON_WIDTH = 20;
 var PERSON_HEIGHT = 40;
+var WIFI_COLOR = "mediumturquoise";
 
 // The compatibility of two love types are relative to how close their IDs are (in a circular list's sense)
 var LOVE_TYPES = [
@@ -458,8 +459,8 @@ var router = function(x, y) {
   return kontra.sprite({
     x: x,
     y: y,
-    color: 'slategrey',
-    wifiUpColor: 'turquoise',
+    color: 'dimgrey',
+    wifiUpColor: WIFI_COLOR,
     wifiLossColor: 'lightgrey',
     wifiDownColor: 'orange',
     width: ROUTER_WIDTH,
@@ -810,6 +811,7 @@ var NUM_PEOPLE = 16;
 var START_MIN = 4;
 var START_SEC = 0;
 var START_LEVEL = 1;  // Set to 0 to use the settings above. 
+var START_STATE = 0;
 
 var game = {
   state: null,
@@ -825,10 +827,8 @@ var game = {
     startMin: 0,
     startSec: 0,
     timer: null,
-    init: function(startMin, startSec) {
-      this.startMin = startMin;
-      this.startSec = startSec;
-      this.start();
+    getTotalSecLeft: function() {
+      return game.time.min*60 + game.time.sec;
     },
     start: function() {
       var self = this;
@@ -853,7 +853,7 @@ var game = {
       this.timer = null;
     },
     render: function() {
-      ctx.fillStyle = 'black'
+      ctx.fillStyle = "black";
       ctx.font = "14px Arial";
       let min = this.min;
       let sec = this.sec;
@@ -870,10 +870,99 @@ var game = {
       this.start();
     }
   },
+  screen: {
+    overlay: kontra.sprite({
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      color: "black",
+      render: function() {
+        ctx.globalAlpha = 0.7;
+        this.draw();
+        ctx.globalAlpha = 1.0;
+      }
+    }),
+    render: function() {
+      if (game.state != game.states.INLEVEL) {
+        this.overlay.render();
+      }
+      game.screens[game.state].render()
+    }
+  },
+  btn: kontra.sprite({
+    x: 195,
+    y: 250,
+    width: 135,
+    height: 30,
+    color: WIFI_COLOR,
+    text: "",
+    cx: function() {
+      return this.x + this.width/2;
+    },
+    cy: function() {
+      return this.y + this.height/2;
+    },
+    collidesWithCursor: function() {
+      let dx = cursor.cx() - this.cx();
+      let dy = cursor.cy() - this.cy();
+      return Math.abs(dx) <= this.width/2 && Math.abs(dy) <= this.height/2;
+    },
+    render: function() {
+      this.draw();
+      ctx.fillStyle = cursor.boldColor;
+      ctx.font = "bold 20px Arial";
+      let x = this.x;
+      if (this.text == "TRY AGAIN") {
+        x += 14;
+      } else if (this.text == "NEXT LEVEL") {
+        x += 8;
+      } else if (this.text == "PLAY") {
+        x += 43;
+      }
+      ctx.fillText(this.text, x, this.y + 22);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = cursor.boldColor;
+      ctx.strokeRect(this.x-1, this.y-1, this.width+2, this.height+2);
+    } 
+  }),
+  nextState: function() {
+    let state = game.state + 1;
+    if (state >= game.states.length) {
+      state = game.state.STARTLEVEL;
+    }
+    game.load(game.level, state);
+    game.screenTimer = null;
+  },
   screens: [
     { // TITLE
+      router: null,
+      person1: null,
+      person2: null,
+      link: null,
+      load: function() {
+        game.btn.text = "PLAY";
+        this.router = router(224, 145);
+        this.person1 = person(-30, 250, 1);
+        this.person2 = person(768, 10, 1);
+        this.link = link(this.person1, this.person2);
+        this.link.lovePower = this.link.maxLovePower;
+        this.router.color = "#393939";
+      },
       render: function() {
-
+        this.router.render();
+        this.router.drawStats();
+        this.link.render();
+        ctx.font = "48px Arial";
+        ctx.fillStyle = cursor.boldColor;
+        ctx.fillText("HOTSPOT", 48, 180);
+        ctx.fillStyle = WIFI_COLOR;
+        ctx.fillText("HOTSPOT", 51, 180);
+        ctx.fillStyle = WIFI_COLOR;
+        ctx.fillText("LOVERS", 296, 180);
+        ctx.fillStyle = cursor.boldColor;
+        ctx.fillText("LOVERS", 299, 180);
+        game.btn.render();
       }
     },
     { // STARTLEVEL
@@ -886,13 +975,12 @@ var game = {
             game.state = game.states.INLEVEL;
             let level = game.levels[game.level-1];
             game.time.stop();
-            game.time.init(level.startMin, level.startSec);
+            game.time.start();
             game.screenTimer = null;
           }, 5000);
         }
       },
       render: function() {
-        console.log(this.isEndGame)
         if (this.isEndGame) {
           ctx.font = "52px Arial";
           ctx.fillStyle = cursor.boldColor;
@@ -920,8 +1008,8 @@ var game = {
       subTextX: 0,
       timer: null,
       load: function() {
-        let totalSecLeft = game.time.min*60 + game.time.sec;
-        if (totalSecLeft > 0) {
+        let totalSecLeft = game.time.getTotalSecLeft();
+        if (game.time.getTotalSecLeft() > 0) {
           let totalSecAtStart = game.time.startMin*60 + game.time.startSec;
           let totalSecTaken = totalSecAtStart - totalSecLeft;
           let minTaken = Math.floor(totalSecTaken/60);
@@ -930,28 +1018,26 @@ var game = {
           this.text = "LEVEL CLEARED!";
           this.subText = "Time taken: " + minTaken + ":" + secTaken;
           this.textX = 50;
-          this.subTextX = 190;
+          this.subTextX = 185;
           if (game.level > 0) {
             game.level += 1;
           }
+          game.btn.text = "NEXT LEVEL";
         } else {
           this.text = "GAME OVER!";
           this.subText = "You ran out of time!";
           this.textX = 100;
           this.subTextX = 180;
+          game.btn.text = "TRY AGAIN";
         }
-        this.timer = window.setTimeout(function() {
-          game.state = game.states.STARTLEVEL;
-          game.loadLevel(game.level);
-          game.screenTimer = null;
-        }, 1200);
       },
       render: function() {
         ctx.font = "52px Arial";
         ctx.fillStyle = cursor.boldColor;
-        ctx.fillText(this.text, this.textX, 170);
+        ctx.fillText(this.text, this.textX, 150);
         ctx.font = "20px Arial";
-        ctx.fillText(this.subText, this.subTextX, 240);
+        ctx.fillText(this.subText, this.subTextX, 210);
+        game.btn.render();
       }
     }
   ],
@@ -1000,25 +1086,32 @@ var game = {
       startSec: 0
     },
   ],
-  loadLevel: function(level) {
+  load: function(level, state) {
     let routerSpawnFieldRatio = 0.5;
     let routerSpawnFieldRatioMin = 0.2;
     let routerSpawnFieldRatioMax = 0.7;
     let personSpawnFieldRatioMin = 0.05;
     let personSpawnFieldRatioMax = 0.85;
     let personalSpaceRatio = 1.5;
-
-    this.state = this.states.STARTLEVEL;
-    isWin = level > this.levels.length
-    this.screens[this.states.STARTLEVEL].load(isWin);
     
-    if (!isWin) {
+    this.state = state;
+    if (state == this.states.TITLE) {
+      this.level = level;
+    }
+    if (state != this.states.STARTLEVEL) {
+      this.screens[state].load();
+      return;
+    }
+    
+    let isEndGame = level > this.levels.length;
+    this.screens[state].load(isEndGame);
+    if (!isEndGame) {
       let numRouters = 0;
       let numPeople = 0;
       let startMin = 0;
       let startSec = 0;
       if (level > 0) {
-        this.level = level;
+        game.level = level;
         numRouters = this.levels[level-1].numRouters;
         numPeople = this.levels[level-1].numPeople;
         startMin = this.levels[level-1].startMin;
@@ -1029,6 +1122,8 @@ var game = {
         startMin = START_MIN;
         startSec = START_SEC;
       }
+      game.time.startMin = startMin;
+      game.time.startSec = startSec;
       
       while (routers.length < numRouters) {
         let x = Math.floor((Math.random() * (routerSpawnFieldRatioMax - routerSpawnFieldRatioMin) + routerSpawnFieldRatioMin) * canvasMaxWidth * canvasWidthRatio);
@@ -1075,7 +1170,6 @@ var game = {
         }
       }
     }
-    return this;
   },
   endLevel: function() {
     window.clearTimeout(this.screens[this.state].screenTimer);
@@ -1084,7 +1178,8 @@ var game = {
     this.screens[this.state].load();
     this.reset();
   }
-}.loadLevel(START_LEVEL);
+};
+game.load(START_LEVEL, START_STATE);
 
 kontra.pointer.onDown(function(event, object) {
   //console.log(cursor.x + ' ' + cursor.y);
@@ -1114,13 +1209,18 @@ kontra.pointer.onDown(function(event, object) {
     if (cursor.isLinking()) {
       cursor.link.destroy();  // Destroy cursor-to-person link if no person is hit
     }
+  } else {
+    if (game.btn.collidesWithCursor()) {
+      game.nextState();
+    }
   }
 });
 
 // RESTART GAME
 kontra.keys.bind('r', function() {
   game.reset();
-  game.loadLevel();
+  //game.screens[game.states.STARTLEVEL].load()
+  game.load(game.level, game.states.STARTLEVEL);
 })
 
 // INSTANT WIN (for debugging)
@@ -1133,8 +1233,10 @@ kontra.keys.bind('x', function() {
   people.splice(0, people.length);
   window.setTimeout(function(){
     game.time.stop();
-    game.time.startMin = 9999;
-    game.time.min = 9999
+    if (game.time.getTotalSecLeft() == 0) {
+      game.time.startMin = 999;
+      game.time.min = 999;
+    }
     game.endLevel();
   }, 1000);
 })
@@ -1177,6 +1279,8 @@ var loop = kontra.gameLoop({
     }
   },
   render: function() {
+    ctx.fillStyle = "darkgrey";
+    ctx.fillRect(0, 0, 1000, 1000);
     for (var i = 0; i < routers.length; i++) {
       routers[i].render()
     }
@@ -1189,10 +1293,10 @@ var loop = kontra.gameLoop({
     for (var i = 0; i < routers.length; i++) {
       routers[i].drawStats();
     }
+    game.screen.render();
     if (cursor.isInCanvas) {
       cursor.render();
     }
-    game.screens[game.state].render();
   }
 });
 
