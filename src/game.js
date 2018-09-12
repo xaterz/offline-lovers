@@ -126,7 +126,7 @@ seq_melody.smoothing = 0.1;
 seq_melody.waveType = "sine"
 
 var seq_bass = new TinyMusic.Sequence( ac, tempo, bass);
-seq_bass.gain.gain.value = 0.4;
+seq_bass.gain.gain.value = 0.3;
 seq_bass.smoothing = 0.1;
 seq_bass.waveType = "sine";
 
@@ -186,7 +186,8 @@ var seq_click = new TinyMusic.Sequence( ac, 180, ['G3 0.25']);
 seq_click.gain.gain.value = 0.05;
 seq_click.loop = false
 
-var seq_fanfare = new TinyMusic.Sequence( ac, 160, fanfare);
+var seq_fanfare = new TinyMusic.Sequence( ac, 180, fanfare);
+seq_fanfare.gain.gain.value = 0.3;
 seq_fanfare.waveType = "triangle";
 seq_fanfare.staccato = 0.1;
 seq_fanfare.loop = false;
@@ -194,10 +195,6 @@ seq_fanfare.loop = false;
 var ROUTER_WIDTH = 20;
 var PERSON_WIDTH = 15;
 var PERSON_HEIGHT = 30;
-
-// Change this to make the game easier/harder!
-var NUM_ROUTERS = 3;
-var NUM_PEOPLE = 16;
 
 // The compatibility of two love types are relative to how close their IDs are (in a circular list's sense)
 var LOVE_TYPES = [
@@ -432,15 +429,14 @@ var link = function(entity1, entity2) {
     },
     success: function() {
       var self = this;
-      gameMaster.score.addScore();
       self.destroy();
       self.entity1.destroy();
       self.entity2.destroy();
       seq_match.play();
       if (people.length == 0) {
         window.setTimeout(function() {
-          gameMaster.time.stop();
-          gameMaster.isGameOver = true;
+          game.time.stop();
+          game.endLevel();
         }, 1000)
       }
     },
@@ -879,56 +875,40 @@ var person = function(x, y, typeId) {
 };
 var people = []
 
-// for debugging
-SPAWN_ROUTERS = true;
-RANDOM_SPAWN = true;
+// Default settings. Change this to make the game easier/harder!
+var NUM_ROUTERS = 3;
+var NUM_PEOPLE = 16;
+var START_MIN = 4;
+var START_SEC = 0;
+var START_LEVEL = 1;  // Set to 0 to use the settings above. 
 
-var gameMaster = {
-  isGameOver: false,
-  isFanfarePlayed: false,
-  score: {
-    value: 0,
-    pointPerMatch: 100,
-    newScores: [],
-    addScoreEvent: null,
-    addScore: function() {
-      var self = this;
-      this.newScores.push(this.pointPerMatch);
-      this.addScoreEvent = window.setTimeout(function() {
-        self.value += self.pointPerMatch;
-        self.newScores.splice(0,1);
-        self.addScoreEvent = null;
-      }, 1000);
-    },
-    render: function() {
-      ctx.font = "14px Arial";
-      ctx.fillStyle = 'black';
-      ctx.fillText(this.value, 8, 16);
-      if (this.newScores.length > 0) {
-        ctx.fillStyle = cursor.boldColor;
-        ctx.fillText("+"+this.newScores.reduce(function(total,num){ return total+num; }), 8, 32);
-      }
-    },
-    reset: function() {
-      this.value = 0;
-      this.newScores = [];
-      window.clearTimeout(this.addScoreEvent);
-    }
+var game = {
+  state: null,
+  states: {
+    TITLE: 0,
+    STARTLEVEL: 1,
+    INLEVEL: 2,
+    ENDLEVEL: 3
   },
   time: {
     min: 0,
     sec: 0,
-    startMin: 4,
+    startMin: 0,
     startSec: 0,
     timer: null,
-    init: function() {
+    init: function(startMin, startSec) {
+      this.startMin = startMin;
+      this.startSec = startSec;
+      this.start();
+    },
+    start: function() {
+      var self = this;
       this.min = this.startMin;
       this.sec = this.startSec;
-      var self = this;
       this.timer = window.setInterval(function(){
         if (self.sec == 0) {
           if (self.min == 0) {
-            gameMaster.isGameOver = true;
+            game.endLevel();
             self.stop();
           } else {
             self.min -= 1;
@@ -938,14 +918,10 @@ var gameMaster = {
           self.sec -= 1;
         }
       }, 1000);
-      return this;
     },
     stop: function() {
       window.clearInterval(this.timer);
       this.timer = null;
-    },
-    getTimeBonus: function() {
-      return (this.min*60 + this.sec)*3;
     },
     render: function() {
       ctx.fillStyle = 'black'
@@ -962,62 +938,188 @@ var gameMaster = {
     },
     reset: function() {
       this.stop();
-      this.init();
-    }
-  }.init(),
-  winScreen: {
-    render: function() {
-      let timeBonus = gameMaster.time.getTimeBonus();
-      let gameText = "";
-      if (timeBonus > 0) {
-        gameText = "YOU WIN!";
-      } else {
-        gameText = "TIME'S UP!";
-      }
-      ctx.font = "48px Arial";
-      ctx.fillStyle = cursor.boldColor;
-      ctx.fillText(gameText, 150, 120);
-      ctx.font = "16px Arial";
-      ctx.fillText("TIME BONUS: "+timeBonus, 200, 185);
-      ctx.font = "36px Arial";
-      ctx.fillText("FINAL SCORE: "+(parseInt(gameMaster.score.value)+parseInt(timeBonus)), 110, 240);
+      this.start();
     }
   },
-  load: function() {
-    this.isGameOver = false;
-    this.score.reset();
-    this.time.reset();
-    people.splice(0, people.length)
-    routers.splice(0, routers.length)
-    links.splice(0, links.length)
-    if (RANDOM_SPAWN) {
-      let routerSpawnFieldRatio = 0.5;
-      let routerSpawnFieldRatioMin = 0.2;
-      let routerSpawnFieldRatioMax = 0.7;
-      let personSpawnFieldRatioMin = 0.05;
-      let personSpawnFieldRatioMax = 0.85;
-      let personalSpaceRatio = 2;
+  screens: [
+    { // TITLE
+      render: function() {
 
-      if (SPAWN_ROUTERS) {
-        while (routers.length < NUM_ROUTERS) {
-          let x = Math.floor((Math.random() * (routerSpawnFieldRatioMax - routerSpawnFieldRatioMin) + routerSpawnFieldRatioMin) * canvasMaxWidth * canvasWidthRatio);
-          let y = Math.floor((Math.random() * (routerSpawnFieldRatioMax - routerSpawnFieldRatioMin) + routerSpawnFieldRatioMin) * canvasMaxHeight * canvasWidthRatio);
-          let isTooClose = false;    
-          for (var i = 0; i < routers.length; i++) {
-            if (Math.abs(routers[i].x - x) < canvasMaxWidth*canvasWidthRatio*routerSpawnFieldRatio/NUM_ROUTERS && Math.abs(routers[i].y - y) < canvasMaxHeight*canvasWidthRatio*routerSpawnFieldRatio/NUM_ROUTERS) {
-              isTooClose = true;
-              break;
-            }
+      }
+    },
+    { // STARTLEVEL
+      timer: null,
+      isEndGame: false,
+      load: function(isEndGame) {
+        this.isEndGame = isEndGame;
+        if (!isEndGame) {
+          this.screenTimer = window.setTimeout(function() {
+            game.state = game.states.INLEVEL;
+            let level = game.levels[game.level-1];
+            game.time.stop();
+            game.time.init(level.startMin, level.startSec);
+            game.screenTimer = null;
+          }, 5000);
+        }
+      },
+      render: function() {
+        console.log(this.isEndGame)
+        if (this.isEndGame) {
+          ctx.font = "52px Arial";
+          ctx.fillStyle = cursor.boldColor;
+          ctx.fillText("YOU WIN!", 140, 180);
+          ctx.font = "20px Arial";
+          ctx.fillText("Now it's your turn to go OFFLINE and find your love!", 40, 240);
+        } else {
+          ctx.font = "60px Arial";
+          ctx.fillStyle = cursor.boldColor;
+          ctx.fillText("LEVEL "+game.level, 150, 180);
+          ctx.font = "24px Arial";
+          ctx.fillText("Get ready!", 210, 240);
+        }
+      }
+    },
+    { // INLEVEL
+      render: function() {
+        game.time.render();
+      }
+    },
+    { // ENDLEVEL
+      text: "",
+      subText: "",
+      textX: 0,
+      subTextX: 0,
+      timer: null,
+      load: function() {
+        let totalSecLeft = game.time.min*60 + game.time.sec;
+        if (totalSecLeft > 0) {
+          let totalSecAtStart = game.time.startMin*60 + game.time.startSec;
+          let totalSecTaken = totalSecAtStart - totalSecLeft;
+          let minTaken = Math.floor(totalSecTaken/60);
+          let secTaken = totalSecTaken%60;
+          if (secTaken < 10) secTaken = "0"+secTaken;
+          seq_fanfare.play()
+          this.text = "LEVEL CLEARED!";
+          this.subText = "Time taken: " + minTaken + ":" + secTaken;
+          this.textX = 50;
+          this.subTextX = 190;
+          if (game.level > 0) {
+            game.level += 1;
           }
-          if (!isTooClose) {
-            routers.push(router(x, y));
+        } else {
+          this.text = "GAME OVER!";
+          this.subText = "You ran out of time!";
+          this.textX = 100;
+          this.subTextX = 180;
+        }
+        this.timer = window.setTimeout(function() {
+          game.state = game.states.STARTLEVEL;
+          game.loadLevel(game.level);
+          game.screenTimer = null;
+        }, 1200);
+      },
+      render: function() {
+        ctx.font = "52px Arial";
+        ctx.fillStyle = cursor.boldColor;
+        ctx.fillText(this.text, this.textX, 170);
+        ctx.font = "20px Arial";
+        ctx.fillText(this.subText, this.subTextX, 240);
+      }
+    }
+  ],
+  reset: function() {
+    this.time.reset();
+    people.splice(0, people.length);
+    routers.splice(0, routers.length);
+    links.splice(0, links.length);
+  },
+  level: 0,
+  levels: [
+    { // LEVEL 1
+      numRouters: 1,
+      numPeople: 12,
+      startMin: 1,
+      startSec: 0
+    },
+    { // LEVEL 2
+      numRouters: 2,
+      numPeople: 14,
+      startMin: 2,
+      startSec: 0
+    },
+    { // LEVEL 3
+      numRouters: 2,
+      numPeople: 18,
+      startMin: 3,
+      startSec: 0
+    },
+    { // LEVEL 4
+      numRouters: 3,
+      numPeople: 20,
+      startMin: 3,
+      startSec: 45
+    },
+    { // LEVEL 5
+      numRouters: 4,
+      numPeople: 22,
+      startMin: 4,
+      startSec: 30
+    },
+    { // LEVEL 6 (BONUS???)
+      numRouters: 5,
+      numPeople: 24,
+      startMin: 5,
+      startSec: 0
+    },
+  ],
+  loadLevel: function(level) {
+    let routerSpawnFieldRatio = 0.5;
+    let routerSpawnFieldRatioMin = 0.2;
+    let routerSpawnFieldRatioMax = 0.7;
+    let personSpawnFieldRatioMin = 0.05;
+    let personSpawnFieldRatioMax = 0.85;
+    let personalSpaceRatio = 2;
+
+    this.state = this.states.STARTLEVEL;
+    isWin = level > this.levels.length
+    this.screens[this.states.STARTLEVEL].load(isWin);
+    
+    if (!isWin) {
+      let numRouters = 0;
+      let numPeople = 0;
+      let startMin = 0;
+      let startSec = 0;
+      if (level > 0) {
+        this.level = level;
+        numRouters = this.levels[level-1].numRouters;
+        numPeople = this.levels[level-1].numPeople;
+        startMin = this.levels[level-1].startMin;
+        startSec = this.levels[level-1].startSec;
+      } else {
+        numRouters = NUM_ROUTERS;
+        numPeople = NUM_PEOPLE;
+        startMin = START_MIN;
+        startSec = START_SEC;
+      }
+      
+      while (routers.length < numRouters) {
+        let x = Math.floor((Math.random() * (routerSpawnFieldRatioMax - routerSpawnFieldRatioMin) + routerSpawnFieldRatioMin) * canvasMaxWidth * canvasWidthRatio);
+        let y = Math.floor((Math.random() * (routerSpawnFieldRatioMax - routerSpawnFieldRatioMin) + routerSpawnFieldRatioMin) * canvasMaxHeight * canvasWidthRatio);
+        let isTooClose = false;    
+        for (var i = 0; i < routers.length; i++) {
+          if (Math.abs(routers[i].x - x) < canvasMaxWidth*canvasWidthRatio*routerSpawnFieldRatio/numRouters && Math.abs(routers[i].y - y) < canvasMaxHeight*canvasWidthRatio*routerSpawnFieldRatio/numRouters) {
+            isTooClose = true;
+            break;
           }
+        }
+        if (!isTooClose) {
+          routers.push(router(x, y));
         }
       }
 
       let index = 0;
-      if (NUM_PEOPLE % 2 == 1) { NUM_PEOPLE -= 1; }
-      while (people.length < NUM_PEOPLE) {
+      if (numPeople % 2 == 1) { numPeople -= 1; }
+      while (people.length < numPeople) {
         if (index >= LOVE_TYPES.length*2) { index = 0; }
         let loveTypeIndex = Math.floor(index / 2);
         let x = Math.floor((Math.random() * (personSpawnFieldRatioMax - personSpawnFieldRatioMin) + personSpawnFieldRatioMin) * canvasMaxWidth * canvasWidthRatio);
@@ -1044,27 +1146,21 @@ var gameMaster = {
           }
         }
       }
-    } else {
-      if (SPAWN_ROUTERS) {
-        routers.push(router(150, 150));
-        routers.push(router(250, 280));
-      }
-      people.push(person(70, 100, 0));
-      people.push(person(120, 280, 3));
-      people.push(person(300, 150, 6));
-      people.push(person(225, 38, 9));
-      people.push(person(400, 50, 0));
-      people.push(person(330, 330, 3));
-      people.push(person(420, 240, 6));
-      people.push(person(175, 230, 9));
     }
     return this;
+  },
+  endLevel: function() {
+    window.clearTimeout(this.screens[this.state].screenTimer);
+    this.screens[this.state].screenTimer = null;
+    this.state = this.states.ENDLEVEL;
+    this.screens[this.state].load();
+    this.reset();
   }
-}.load();
+}.loadLevel(START_LEVEL);
 
 kontra.pointer.onDown(function(event, object) {
   //console.log(cursor.x + ' ' + cursor.y);
-  if (!gameMaster.isGameOver) {
+  if (game.state == game.states.INLEVEL) {
     for (var i = 0; i < people.length; i++) {
       if (people[i].collidesWithCursor()) {
         if (!people[i].hasWifi()) {
@@ -1095,20 +1191,23 @@ kontra.pointer.onDown(function(event, object) {
 
 // RESTART GAME
 kontra.keys.bind('r', function() {
-  gameMaster.load();
+  game.reset();
+  game.loadLevel();
 })
 
 // INSTANT WIN (for debugging)
 kontra.keys.bind('z', function() {
-  gameMaster.time.min = 0;
-  gameMaster.time.sec = 0;
+  game.time.min = 0;
+  game.time.sec = 0;
+  game.endLevel();
 })
 kontra.keys.bind('x', function() {
   people.splice(0, people.length);
-  gameMaster.score.addScore(400);
   window.setTimeout(function(){
-    gameMaster.time.stop();
-    gameMaster.isGameOver = true;
+    game.time.stop();
+    game.time.startMin = 9999;
+    game.time.min = 9999
+    game.endLevel();
   }, 1000);
 })
 
@@ -1124,7 +1223,7 @@ var loop = kontra.gameLoop({
       cursor.x = kontra.pointer.x * canvasWidthRatio;
       cursor.y = kontra.pointer.y * canvasWidthRatio;
     }
-    if (!gameMaster.isGameOver) {
+    if (game.state == game.states.INLEVEL) {
       let numBoostLove = 0;
       for (var i = 0; i < links.length; i++) {
         if (links[i].isPerfectMatch()) {
@@ -1165,18 +1264,7 @@ var loop = kontra.gameLoop({
     if (cursor.isInCanvas) {
       cursor.render();
     }
-    if (!gameMaster.isGameOver) {
-      gameMaster.score.render();
-      gameMaster.time.render();
-    } else {
-      seq_melody.stop()
-      seq_bass.stop()
-      gameMaster.winScreen.render();
-      if (!gameMaster.isFanfarePlayed) {
-        seq_fanfare.play()
-        gameMaster.isFanfarePlayed = true;
-      }
-    }
+    game.screens[game.state].render();
   }
 });
 
